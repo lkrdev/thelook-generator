@@ -153,6 +153,9 @@ Creates a unique test dataset using `gcloud`/`bq`, builds the binary, deploys ta
 
 # 2. Production (full backfill: 3650 days / 10 years):
 ./deploy-bq.sh --mode production
+
+# 3. Also register the `thelook_bq` BigQuery connection in Looker (prompts for Base URL, Client ID, and Client Secret):
+./deploy-bq.sh --looker
 ```
 
 In Cloud Shell, click **Web Preview** -> **Preview on port 8080** and enter the printed `SECRET` key to view the live dashboard.

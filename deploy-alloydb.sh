@@ -20,10 +20,13 @@ SECRET="${SECRET:-thelook-${RANDOM}${RANDOM}}"
 PORT="8080"
 SETUP_LOOKER="false"
 LOOKER_CONNECTION="thelook_alloydb"
+LOOKERSDK_BASE_URL="${LOOKERSDK_BASE_URL:-}"
+LOOKERSDK_CLIENT_ID="${LOOKERSDK_CLIENT_ID:-}"
+LOOKERSDK_CLIENT_SECRET="${LOOKERSDK_CLIENT_SECRET:-}"
 AUTHORIZED_NETWORKS=""
 
 usage() {
-  echo "Usage: ./deploy-alloydb.sh [--mode testing|production] [--project ID] [--region REGION] [--days N] [--image URI] [--looker] [--looker-connection NAME] [--authorized-networks CIDRS]"
+  echo "Usage: ./deploy-alloydb.sh [--mode testing|production] [--project ID] [--region REGION] [--days N] [--image URI] [--looker] [--looker-connection NAME] [--looker-base-url URL] [--looker-client-id ID] [--looker-client-secret SECRET] [--authorized-networks CIDRS]"
   exit 0
 }
 
@@ -45,6 +48,9 @@ while [[ $# -gt 0 ]]; do
     --port)                 PORT="$2"; shift 2 ;;
     --looker)               SETUP_LOOKER="true"; shift 1 ;;
     --looker-connection)    SETUP_LOOKER="true"; LOOKER_CONNECTION="$2"; shift 2 ;;
+    --looker-base-url)      SETUP_LOOKER="true"; LOOKERSDK_BASE_URL="$2"; shift 2 ;;
+    --looker-client-id)     SETUP_LOOKER="true"; LOOKERSDK_CLIENT_ID="$2"; shift 2 ;;
+    --looker-client-secret) SETUP_LOOKER="true"; LOOKERSDK_CLIENT_SECRET="$2"; shift 2 ;;
     --authorized-networks)  AUTHORIZED_NETWORKS="$2"; shift 2 ;;
     -h|--help)              usage ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
@@ -62,15 +68,33 @@ fi
 
 echo "==> Provisioning AlloyDB (${ALLOYDB_MACHINE_TYPE}, ZONAL) + Compute Engine VM (${MACHINE_TYPE}) (${PROJECT}) [${MODE}: ${BACKFILL_DAYS}d backfill]"
 
-# Optional: Fetch Looker public_egress_ip_addresses if --looker is set and no CIDRs were manually passed
-if [[ "${SETUP_LOOKER}" == "true" && -z "${AUTHORIZED_NETWORKS}" ]]; then
-  echo "==> Fetching Looker public egress IP addresses via Looker SDK (public_egress_ip_addresses)..."
-  AUTHORIZED_NETWORKS="$(uvx --from "lkr-dev-cli[codemode]" lkr-dev-cli code-mode sandbox --code '
+# Optional: Prompt for Looker credentials & fetch Looker public_egress_ip_addresses if --looker is set
+if [[ "${SETUP_LOOKER}" == "true" ]]; then
+  [[ -z "${LOOKERSDK_BASE_URL}" ]] && read -rp "Looker Base URL (e.g. https://instance.cloud.looker.com): " LOOKERSDK_BASE_URL
+  [[ -z "${LOOKERSDK_CLIENT_ID}" ]] && read -rp "Looker Client ID: " LOOKERSDK_CLIENT_ID
+  if [[ -z "${LOOKERSDK_CLIENT_SECRET}" ]]; then
+    read -rsp "Looker Client Secret: " LOOKERSDK_CLIENT_SECRET
+    echo ""
+  fi
+  export LOOKERSDK_BASE_URL LOOKERSDK_CLIENT_ID LOOKERSDK_CLIENT_SECRET
+
+  if [[ -z "${AUTHORIZED_NETWORKS}" ]]; then
+    if ! command -v uvx &>/dev/null; then
+      echo "Warning: 'uvx' command not found. Cannot fetch Looker public_egress_ip_addresses automatically." >&2
+    else
+      echo "==> Fetching Looker public egress IP addresses via Looker SDK (public_egress_ip_addresses)..."
+      AUTHORIZED_NETWORKS="$(uvx --from "lkr-dev-cli[code-mode]" lkr-dev-cli \
+        --base-url "${LOOKERSDK_BASE_URL}" \
+        --client-id "${LOOKERSDK_CLIENT_ID}" \
+        --client-secret "${LOOKERSDK_CLIENT_SECRET}" \
+        code-mode sandbox --code '
 res = public_egress_ip_addresses()
 ips = res.get("egress_ip_addresses") or []
 return ",".join([ip if "/" in ip else f"{ip}/32" for ip in ips])
 ' 2>/dev/null | tr -d '"' || true)"
-  echo "    Looker Egress CIDRs: ${AUTHORIZED_NETWORKS:-<none returned; pass --authorized-networks if on Looker Core>}"
+      echo "    Looker Egress CIDRs: ${AUTHORIZED_NETWORKS:-<none returned; pass --authorized-networks if on Looker Core>}"
+    fi
+  fi
 fi
 
 # 1. Enable required APIs
@@ -188,7 +212,11 @@ if [[ "${SETUP_LOOKER}" == "true" && -n "${ALLOYDB_PUBLIC_IP}" ]]; then
     echo "Please install 'uv' (https://github.com/astral-sh/uv) to enable automatic Looker registration." >&2
   else
     echo "==> Registering Looker connection '${LOOKER_CONNECTION}' -> ${ALLOYDB_PUBLIC_IP}:5432..."
-    uvx --from "lkr-dev-cli[codemode]" lkr-dev-cli code-mode sandbox \
+    uvx --from "lkr-dev-cli[code-mode]" lkr-dev-cli \
+      --base-url "${LOOKERSDK_BASE_URL}" \
+      --client-id "${LOOKERSDK_CLIENT_ID}" \
+      --client-secret "${LOOKERSDK_CLIENT_SECRET}" \
+      code-mode sandbox \
       -v conn_name="${LOOKER_CONNECTION}" \
       -v host="${ALLOYDB_PUBLIC_IP}" \
       -v password="${DB_PASSWORD}" \
