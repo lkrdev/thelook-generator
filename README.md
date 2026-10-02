@@ -1,5 +1,7 @@
 # thelook-generator
 
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?shellonly=true&cloudshell_git_repo=https://github.com/lkrdev/thelook-generator)
+
 A Go CLI that analyzes and generates TheLook e-commerce data (`thelook.ecomm`) directly into BigQuery or PostgreSQL (including AlloyDB and Cloud SQL).
 
 For BigQuery, it uses free NDJSON batch load jobs for historical backfills and the Storage Write API with native Change Data Capture (`_CHANGE_TYPE = 'UPSERT'`) for sub-second live streaming and order lifecycle transitions. For PostgreSQL and AlloyDB, it uses pipelined batch inserts and native `ON CONFLICT (id) DO UPDATE` upserts.
