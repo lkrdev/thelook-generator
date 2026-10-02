@@ -129,23 +129,26 @@ if [ -n "${IMAGE}" ]; then
   apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io ca-certificates
   gcloud auth configure-docker "\$(echo "${IMAGE}" | cut -d/ -f1)" --quiet || true
   docker pull "${IMAGE}"
-  docker run --rm -e TARGET_DB=postgres -e DATABASE_URL="${DATABASE_URL}" -e SECRET="${SECRET}" -v /var/lib/thelook:/data "${IMAGE}" deploy
-  if [ "${BACKFILL_DAYS}" -gt 0 ]; then
-    docker run --rm -e TARGET_DB=postgres -e DATABASE_URL="${DATABASE_URL}" -e SECRET="${SECRET}" -v /var/lib/thelook:/data "${IMAGE}" backfill --days "${BACKFILL_DAYS}" --state /data/state.gob
-  fi
-  EXEC_START="/usr/bin/docker run --name thelook --rm -p 8080:8080 -e TARGET_DB=postgres -e DATABASE_URL=${DATABASE_URL} -e SECRET=${SECRET} -v /var/lib/thelook:/data ${IMAGE} run --state /data/state.gob --http :8080"
+  CID=\$(docker create "${IMAGE}")
+  docker cp "\${CID}:/usr/local/bin/thelook" /usr/local/bin/thelook
+  docker rm "\${CID}"
+  chmod +x /usr/local/bin/thelook
 else
-  # Source mode: compile binary using 2GB swap
-  apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git golang-go ca-certificates
+  # Source mode: install official Go toolchain and compile binary using 2GB swap
+  apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git wget ca-certificates
+  if ! command -v go &>/dev/null; then
+    wget -qO- https://go.dev/dl/go1.22.2.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+    ln -sf /usr/local/go/bin/go /usr/local/bin/go
+  fi
   mkdir -p /opt/thelook && cd /opt/thelook
   [[ -d "thelook-generator" ]] || git clone https://github.com/lkrdev/thelook-generator.git
   cd thelook-generator
-  go build -ldflags="-s -w" -o /usr/local/bin/thelook .
-  /usr/local/bin/thelook deploy
-  if [ "${BACKFILL_DAYS}" -gt 0 ]; then
-    /usr/local/bin/thelook backfill --days "${BACKFILL_DAYS}" --state /var/lib/thelook/state.gob
-  fi
-  EXEC_START="/usr/local/bin/thelook run --state /var/lib/thelook/state.gob --http :8080"
+  GOTOOLCHAIN=auto /usr/local/bin/go build -ldflags="-s -w" -o /usr/local/bin/thelook .
+fi
+
+/usr/local/bin/thelook deploy
+if [ "${BACKFILL_DAYS}" -gt 0 ]; then
+  /usr/local/bin/thelook backfill --days "${BACKFILL_DAYS}" --state /var/lib/thelook/state.gob
 fi
 
 cat <<UNIT > /etc/systemd/system/thelook.service
@@ -158,7 +161,7 @@ Type=simple
 Environment=TARGET_DB=postgres
 Environment=DATABASE_URL=${DATABASE_URL}
 Environment=SECRET=${SECRET}
-ExecStart=\${EXEC_START}
+ExecStart=/usr/local/bin/thelook run --state /var/lib/thelook/state.gob --http :8080
 Restart=always
 
 [Install]
@@ -180,12 +183,16 @@ gcloud compute instances create "${VM_NAME}" \
 
 # 6. Optional: Create or update the Looker connection (thelook_alloydb) via Looker SDK
 if [[ "${SETUP_LOOKER}" == "true" && -n "${ALLOYDB_PUBLIC_IP}" ]]; then
-  echo "==> Registering Looker connection '${LOOKER_CONNECTION}' -> ${ALLOYDB_PUBLIC_IP}:5432..."
-  uvx --from "lkr-dev-cli[codemode]" lkr-dev-cli code-mode sandbox \
-    -v conn_name="${LOOKER_CONNECTION}" \
-    -v host="${ALLOYDB_PUBLIC_IP}" \
-    -v password="${DB_PASSWORD}" \
-    --code '
+  if ! command -v uvx &>/dev/null; then
+    echo "Warning: 'uvx' command not found. Skipping Looker connection registration." >&2
+    echo "Please install 'uv' (https://github.com/astral-sh/uv) to enable automatic Looker registration." >&2
+  else
+    echo "==> Registering Looker connection '${LOOKER_CONNECTION}' -> ${ALLOYDB_PUBLIC_IP}:5432..."
+    uvx --from "lkr-dev-cli[codemode]" lkr-dev-cli code-mode sandbox \
+      -v conn_name="${LOOKER_CONNECTION}" \
+      -v host="${ALLOYDB_PUBLIC_IP}" \
+      -v password="${DB_PASSWORD}" \
+      --code '
 body = {
     "name": conn_name,
     "dialect_name": "alloydb",
@@ -202,6 +209,7 @@ if existing:
     return update_connection(conn_name, body=body)
 return create_connection(body=body)
 '
+  fi
 fi
 
 echo ""
