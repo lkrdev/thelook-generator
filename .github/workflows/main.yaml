@@ -1,0 +1,75 @@
+name: Merge to Main
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  REGION: us-central1
+  SERVICE_NAME: thelook-generator
+  APP_NAME: thelook-generator
+
+jobs:
+  build-and-push:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Run unit tests
+        run: go test -v ./...
+
+      - name: Set TAG
+        run: echo "TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Set IMAGE_NAME
+        run: echo "IMAGE_NAME=${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.APP_NAME }}/${{ env.SERVICE_NAME }}" >> $GITHUB_ENV
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push Docker image
+        run: |
+          LOG_DIR_FLAG=""
+          if [ -n "${{ secrets.GCP_LOGS_BUCKET_NAME }}" ]; then
+            LOG_DIR_FLAG="--gcs-log-dir=gs://${{ secrets.GCP_LOGS_BUCKET_NAME }}/${{ env.APP_NAME }}"
+          fi
+          gcloud builds submit . \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} \
+            $LOG_DIR_FLAG
+
+          gcloud artifacts docker tags add ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.IMAGE_NAME }}:latest --quiet
+
+      - name: Save Image Name
+        run: echo "${{ env.IMAGE_NAME }}:${{ env.TAG }}" > image-name.txt
+
+      - name: Upload Image Name Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-name
+          path: image-name.txt
+
+      - name: Log Image Name to Summary
+        run: |
+          echo "### 🐳 Built Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tagged:** \`${{ env.IMAGE_NAME }}:${{ env.TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Latest:** \`${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
