@@ -1,0 +1,2456 @@
+{
+  "distribution_centers": [
+    {
+      "id": 1,
+      "name": "Memphis TN",
+      "latitude": 35.1174,
+      "longitude": -89.9711
+    },
+    {
+      "id": 2,
+      "name": "Chicago IL",
+      "latitude": 41.8369,
+      "longitude": -87.6847
+    },
+    {
+      "id": 3,
+      "name": "Houston TX",
+      "latitude": 29.7604,
+      "longitude": -95.3698
+    },
+    {
+      "id": 4,
+      "name": "Los Angeles CA",
+      "latitude": 34.05,
+      "longitude": -118.25
+    },
+    {
+      "id": 5,
+      "name": "New Orleans LA",
+      "latitude": 29.95,
+      "longitude": -90.0667
+    },
+    {
+      "id": 6,
+      "name": "Port Authority of New York/New Jersey NY/NJ",
+      "latitude": 40.634,
+      "longitude": -73.7834
+    },
+    {
+      "id": 7,
+      "name": "Philadelphia PA",
+      "latitude": 39.95,
+      "longitude": -75.1667
+    },
+    {
+      "id": 8,
+      "name": "Mobile AL",
+      "latitude": 30.6944,
+      "longitude": -88.0431
+    },
+    {
+      "id": 9,
+      "name": "Charleston SC",
+      "latitude": 32.7833,
+      "longitude": -79.9333
+    },
+    {
+      "id": 10,
+      "name": "Savannah GA",
+      "latitude": 32.0167,
+      "longitude": -81.1167
+    }
+  ],
+  "hourly_weights": [
+    8450,
+    6920,
+    5610,
+    4680,
+    4120,
+    3950,
+    4010,
+    4280,
+    4610,
+    5040,
+    6371,
+    7904,
+    9309,
+    10606,
+    11736,
+    13241,
+    14966,
+    16777,
+    17553,
+    18147,
+    17475,
+    14375,
+    12065,
+    10376
+  ],
+  "categories": [
+    {
+      "department": "Men",
+      "category": "Jeans",
+      "weight": 1117,
+      "avg_price": 101.16,
+      "std_price": 67.24,
+      "min_price": 9.99,
+      "max_price": 389.0,
+      "cost_ratio": 0.5316
+    },
+    {
+      "department": "Men",
+      "category": "Underwear",
+      "weight": 1088,
+      "avg_price": 27.16,
+      "std_price": 14.99,
+      "min_price": 5.99,
+      "max_price": 283.34,
+      "cost_ratio": 0.4703
+    },
+    {
+      "department": "Men",
+      "category": "Tops & Tees",
+      "weight": 1084,
+      "avg_price": 42.25,
+      "std_price": 30.3,
+      "min_price": 5.0,
+      "max_price": 268.0,
+      "cost_ratio": 0.5608
+    },
+    {
+      "department": "Men",
+      "category": "Pants",
+      "weight": 1041,
+      "avg_price": 59.81,
+      "std_price": 38.33,
+      "min_price": 9.99,
+      "max_price": 293.33,
+      "cost_ratio": 0.459
+    },
+    {
+      "department": "Men",
+      "category": "Sweaters",
+      "weight": 999,
+      "avg_price": 77.59,
+      "std_price": 55.65,
+      "min_price": 9.0,
+      "max_price": 349.98,
+      "cost_ratio": 0.5004
+    },
+    {
+      "department": "Men",
+      "category": "Fashion Hoodies & Sweatshirts",
+      "weight": 971,
+      "avg_price": 58.32,
+      "std_price": 41.18,
+      "min_price": 10.43,
+      "max_price": 903.0,
+      "cost_ratio": 0.5503
+    },
+    {
+      "department": "Men",
+      "category": "Sleep & Lounge",
+      "weight": 941,
+      "avg_price": 50.16,
+      "std_price": 46.6,
+      "min_price": 6.99,
+      "max_price": 399.95,
+      "cost_ratio": 0.3993
+    },
+    {
+      "department": "Men",
+      "category": "Shorts",
+      "weight": 939,
+      "avg_price": 50.14,
+      "std_price": 55.4,
+      "min_price": 7.9,
+      "max_price": 999.0,
+      "cost_ratio": 0.5008
+    },
+    {
+      "department": "Men",
+      "category": "Swim",
+      "weight": 906,
+      "avg_price": 50.09,
+      "std_price": 24.31,
+      "min_price": 12.9,
+      "max_price": 274.99,
+      "cost_ratio": 0.6005
+    },
+    {
+      "department": "Men",
+      "category": "Socks",
+      "weight": 905,
+      "avg_price": 20.42,
+      "std_price": 43.04,
+      "min_price": 2.99,
+      "max_price": 903.0,
+      "cost_ratio": 0.6023
+    },
+    {
+      "department": "Men",
+      "category": "Outerwear & Coats",
+      "weight": 828,
+      "avg_price": 149.27,
+      "std_price": 143.88,
+      "min_price": 11.99,
+      "max_price": 999.0,
+      "cost_ratio": 0.4421
+    },
+    {
+      "department": "Men",
+      "category": "Accessories",
+      "weight": 820,
+      "avg_price": 41.68,
+      "std_price": 45.63,
+      "min_price": 1.5,
+      "max_price": 296.45,
+      "cost_ratio": 0.4007
+    },
+    {
+      "department": "Men",
+      "category": "Active",
+      "weight": 753,
+      "avg_price": 47.63,
+      "std_price": 63.55,
+      "min_price": 5.0,
+      "max_price": 903.0,
+      "cost_ratio": 0.4207
+    },
+    {
+      "department": "Men",
+      "category": "Suits & Sport Coats",
+      "weight": 739,
+      "avg_price": 126.56,
+      "std_price": 98.77,
+      "min_price": 9.99,
+      "max_price": 698.0,
+      "cost_ratio": 0.4007
+    },
+    {
+      "department": "Women",
+      "category": "Intimates",
+      "weight": 2363,
+      "avg_price": 33.71,
+      "std_price": 30.14,
+      "min_price": 1.75,
+      "max_price": 903.0,
+      "cost_ratio": 0.5306
+    },
+    {
+      "department": "Women",
+      "category": "Dresses",
+      "weight": 955,
+      "avg_price": 84.2,
+      "std_price": 81.34,
+      "min_price": 7.99,
+      "max_price": 498.0,
+      "cost_ratio": 0.4513
+    },
+    {
+      "department": "Women",
+      "category": "Maternity",
+      "weight": 898,
+      "avg_price": 50.8,
+      "std_price": 37.36,
+      "min_price": 1.98,
+      "max_price": 275.0,
+      "cost_ratio": 0.4415
+    },
+    {
+      "department": "Women",
+      "category": "Fashion Hoodies & Sweatshirts",
+      "weight": 895,
+      "avg_price": 49.14,
+      "std_price": 29.52,
+      "min_price": 8.88,
+      "max_price": 288.0,
+      "cost_ratio": 0.4705
+    },
+    {
+      "department": "Women",
+      "category": "Swim",
+      "weight": 892,
+      "avg_price": 65.66,
+      "std_price": 43.13,
+      "min_price": 5.95,
+      "max_price": 288.0,
+      "cost_ratio": 0.4209
+    },
+    {
+      "department": "Women",
+      "category": "Jeans",
+      "weight": 882,
+      "avg_price": 93.66,
+      "std_price": 59.04,
+      "min_price": 12.0,
+      "max_price": 326.0,
+      "cost_ratio": 0.5412
+    },
+    {
+      "department": "Women",
+      "category": "Sleep & Lounge",
+      "weight": 830,
+      "avg_price": 48.15,
+      "std_price": 34.94,
+      "min_price": 2.99,
+      "max_price": 360.0,
+      "cost_ratio": 0.601
+    },
+    {
+      "department": "Women",
+      "category": "Shorts",
+      "weight": 826,
+      "avg_price": 40.8,
+      "std_price": 32.16,
+      "min_price": 4.99,
+      "max_price": 246.0,
+      "cost_ratio": 0.5003
+    },
+    {
+      "department": "Women",
+      "category": "Tops & Tees",
+      "weight": 784,
+      "avg_price": 40.08,
+      "std_price": 36.53,
+      "min_price": 3.11,
+      "max_price": 285.0,
+      "cost_ratio": 0.5589
+    },
+    {
+      "department": "Women",
+      "category": "Plus",
+      "weight": 758,
+      "avg_price": 38.43,
+      "std_price": 51.02,
+      "min_price": 1.82,
+      "max_price": 903.0,
+      "cost_ratio": 0.5008
+    },
+    {
+      "department": "Women",
+      "category": "Accessories",
+      "weight": 739,
+      "avg_price": 43.55,
+      "std_price": 50.87,
+      "min_price": 2.0,
+      "max_price": 299.0,
+      "cost_ratio": 0.4007
+    },
+    {
+      "department": "Women",
+      "category": "Sweaters",
+      "weight": 738,
+      "avg_price": 72.24,
+      "std_price": 62.77,
+      "min_price": 5.99,
+      "max_price": 588.0,
+      "cost_ratio": 0.449
+    },
+    {
+      "department": "Women",
+      "category": "Active",
+      "weight": 679,
+      "avg_price": 53.93,
+      "std_price": 87.13,
+      "min_price": 1.95,
+      "max_price": 903.0,
+      "cost_ratio": 0.4202
+    },
+    {
+      "department": "Women",
+      "category": "Socks & Hosiery",
+      "weight": 666,
+      "avg_price": 16.76,
+      "std_price": 11.29,
+      "min_price": 1.95,
+      "max_price": 159.95,
+      "cost_ratio": 0.4013
+    },
+    {
+      "department": "Women",
+      "category": "Pants & Capris",
+      "weight": 613,
+      "avg_price": 54.71,
+      "std_price": 58.76,
+      "min_price": 7.92,
+      "max_price": 895.0,
+      "cost_ratio": 0.531
+    },
+    {
+      "department": "Women",
+      "category": "Outerwear & Coats",
+      "weight": 592,
+      "avg_price": 141.47,
+      "std_price": 129.94,
+      "min_price": 10.51,
+      "max_price": 903.0,
+      "cost_ratio": 0.4495
+    },
+    {
+      "department": "Women",
+      "category": "Leggings",
+      "weight": 564,
+      "avg_price": 27.15,
+      "std_price": 34.05,
+      "min_price": 4.99,
+      "max_price": 528.81,
+      "cost_ratio": 0.6
+    },
+    {
+      "department": "Women",
+      "category": "Blazers & Jackets",
+      "weight": 561,
+      "avg_price": 92.6,
+      "std_price": 92.25,
+      "min_price": 7.68,
+      "max_price": 698.0,
+      "cost_ratio": 0.38
+    },
+    {
+      "department": "Women",
+      "category": "Skirts",
+      "weight": 367,
+      "avg_price": 52.33,
+      "std_price": 61.52,
+      "min_price": 6.49,
+      "max_price": 598.0,
+      "cost_ratio": 0.3998
+    },
+    {
+      "department": "Women",
+      "category": "Suits",
+      "weight": 188,
+      "avg_price": 116.16,
+      "std_price": 46.29,
+      "min_price": 13.99,
+      "max_price": 239.72,
+      "cost_ratio": 0.6046
+    },
+    {
+      "department": "Women",
+      "category": "Jumpsuits & Rompers",
+      "weight": 162,
+      "avg_price": 45.42,
+      "std_price": 62.33,
+      "min_price": 8.74,
+      "max_price": 550.0,
+      "cost_ratio": 0.5288
+    },
+    {
+      "department": "Women",
+      "category": "Clothing Sets",
+      "weight": 37,
+      "avg_price": 84.84,
+      "std_price": 42.27,
+      "min_price": 19.99,
+      "max_price": 199.95,
+      "cost_ratio": 0.6183
+    }
+  ],
+  "brands": [
+    "Levi's",
+    "Calvin Klein",
+    "Allegra K",
+    "Columbia",
+    "Carhartt",
+    "Dockers",
+    "Hanes",
+    "Volcom",
+    "Nautica",
+    "Quiksilver",
+    "Tommy Hilfiger",
+    "Hurley",
+    "Diesel",
+    "Speedo",
+    "American Apparel",
+    "Wrangler",
+    "Motherhood Maternity",
+    "Champion",
+    "7 For All Mankind",
+    "Lucky Brand",
+    "FineBrandShop",
+    "Dickies",
+    "SmartWool",
+    "O'Neill",
+    "Jones New York",
+    "DC",
+    "Roxy",
+    "True Religion",
+    "Fox",
+    "Fruit of the Loom",
+    "Ray-Ban",
+    "HUGO BOSS",
+    "Oakley",
+    "Calvin Klein Jeans",
+    "adidas",
+    "Kenneth Cole",
+    "Haggar",
+    "Ralph Lauren",
+    "Lee",
+    "Anne Klein",
+    "Joe's Jeans",
+    "Orvis",
+    "HUE",
+    "Jockey",
+    "Patty",
+    "Anna-Kaci",
+    "Hot Topic",
+    "IZOD",
+    "Port Authority",
+    "Perry Ellis",
+    "Bali",
+    "Ed Hardy",
+    "Not Your Daughter's Jeans",
+    "Pendleton",
+    "Nike",
+    "Woolrich",
+    "Gold Toe",
+    "Billabong",
+    "Woman Within",
+    "eVogues Apparel",
+    "Duofold",
+    "Thorlo",
+    "Tommy Bahama",
+    "Vanity Fair",
+    "G-Star",
+    "Sutton Studio",
+    "SK Hat shop",
+    "Ed Garments",
+    "RVCA",
+    "Hot from Hollywood",
+    "Harley-Davidson",
+    "Maidenform",
+    "Geoffrey Beene",
+    "Icebreaker",
+    "Eddie Bauer",
+    "Bella",
+    "U.S. Polo Assn.",
+    "Mountain Hardwear",
+    "Majestic International",
+    "A:X Armani Exchange",
+    "Polo Ralph Lauren",
+    "2b by bebe",
+    "Wacoal",
+    "Laura",
+    "Paul Fredrick",
+    "Original Penguin",
+    "Hanro",
+    "Wigwam",
+    "Southpole",
+    "French Connection",
+    "Life Is Good",
+    "Luxury Divas",
+    "TrendsBlue",
+    "LRG",
+    "Sock It To Me",
+    "2(x)ist",
+    "Silver Jeans",
+    "Kenneth Cole REACTION",
+    "Metal Mulisha",
+    "Ilusion",
+    "Tri-Mountain",
+    "MANGO",
+    "AG Adriano Goldschmied",
+    "Under Armour",
+    "boxed-gifts",
+    "Michael Kors",
+    "Van Heusen",
+    "Flexees",
+    "Samanthas Style Shoppe",
+    "Alexander Del Rossa",
+    "Betsey Johnson",
+    "Alfred Dunner",
+    "SEX NIGHT",
+    "BCBGMAXAZRIA",
+    "LOTUSTRADERS",
+    "Bottoms Out",
+    "Three Seasons Maternity",
+    "G by GUESS",
+    "Russell Athletic",
+    "ExOfficio",
+    "Alki'i",
+    "PUMA",
+    "K. Bell",
+    "Frederick's of Hollywood",
+    "Alternative",
+    "Barely There",
+    "Savane",
+    "Gary Majdell Sport",
+    "A Pea in the Pod",
+    "The Little Alpaca's House",
+    "Devon & Jones",
+    "DREAMS",
+    "Joseph Abboud",
+    "Intimo",
+    "Rip Curl",
+    "King Formal Wear",
+    "LabelShopper",
+    "ASICS",
+    "NEFF",
+    "Burnside",
+    "Playtex",
+    "Angelina",
+    "Natori",
+    "Bslingerie",
+    "UNIONBAY",
+    "Arc'teryx",
+    "PAIGE",
+    "C-IN2",
+    "KUT from the Kloth",
+    "Harbor Bay",
+    "Fred Perry",
+    "Underworks",
+    "Karen Kane",
+    "Hudson",
+    "Only Hearts",
+    "Activewear Apparel",
+    "Fashion Forms",
+    "The North Face",
+    "Carol Wright Gifts",
+    "Nine West",
+    "GUESS",
+    "Evan Picone",
+    "Hello Kitty",
+    "Isotoner",
+    "Seafolly",
+    "prAna",
+    "Ice",
+    "London Fog",
+    "Hot Chillys",
+    "The Pajamagram Company",
+    "Ecoscapes",
+    "Rock Revival",
+    "TYR",
+    "American Essentials",
+    "Capezio",
+    "Alpinestars",
+    "Outdoor Research",
+    "Cosabella",
+    "Guide Gear",
+    "Casual Moments",
+    "Glamorise",
+    "Rusty",
+    "BCBGeneration",
+    "District Threads",
+    "Wool Overs",
+    "Miraclesuit",
+    "Braza",
+    "LeggingsQueen",
+    "Foot Traffic",
+    "Vince Camuto",
+    "Matix",
+    "Hatley",
+    "Kasper",
+    "Paul Frank",
+    "Kanu Surf",
+    "Sanctuary",
+    "Retrofit",
+    "Felina",
+    "Yelete",
+    "Marc Ecko Cut & Sew",
+    "UltraClub",
+    "Juicy Couture",
+    "Spa & Resort",
+    "Ibex",
+    "Wrightsock",
+    "Bullhead",
+    "Carole Hochman",
+    "AxParis",
+    "Robert Graham",
+    "Shadowline",
+    "Comfort Choice",
+    "Gildan",
+    "Y&G",
+    "Briefly Stated",
+    "Reebok",
+    "Buffalo by David Bitton",
+    "TheTieBar",
+    "Under Moments",
+    "Ripe Maternity",
+    "Coolibar",
+    "Louis Raphael",
+    "Wolverine",
+    "Emporio Armani",
+    "Ben Sherman",
+    "Harriton",
+    "Jessica Simpson",
+    "Trina Turk",
+    "KNOTHE CORP.",
+    "Key Industries",
+    "Mod-O-Doc",
+    "Belly Bandit",
+    "ECHO",
+    "VIP BOUTIQUE",
+    "Stella Elyse",
+    "eloquii",
+    "Gregg Homme",
+    "Le Suit",
+    "J.C. Rags",
+    "Fun Boxers",
+    "bebe",
+    "Moving Comfort",
+    "KAMALIKULTURE",
+    "DKNY",
+    "Alpha Industries",
+    "Kensie",
+    "KingSize",
+    "Soho Girls",
+    "TapouT",
+    "Royal Robbins",
+    "Up2date Fashion",
+    "INDERA THERMALS",
+    "Next Level",
+    "Pearl iZUMi",
+    "Body Glove",
+    "Curve Appeal",
+    "Darn Tough",
+    "Splendid",
+    "Tahari",
+    "Timberland",
+    "Three Dots",
+    "VIVILLI",
+    "MJ Soffe",
+    "DG Eyewear",
+    "Cubavera",
+    "Wallflower",
+    "Rampage",
+    "Affliction",
+    "Giorgio Cerruti",
+    "Anita",
+    "Capelli New York",
+    "Torrid",
+    "Cloris Murphy",
+    "Danskin",
+    "Warner's",
+    "Scotch & Soda",
+    "Helly Hansen",
+    "Charles River Apparel",
+    "Sofie",
+    "Corset Story",
+    "Sag Harbor",
+    "Hanky Panky",
+    "Ted Baker",
+    "180s",
+    "Marina West",
+    "Democracy",
+    "Papi",
+    "Bjorn Borg",
+    "BB Dakota",
+    "Sons Of Anarchy",
+    "Canyon Ridge",
+    "Football Fanatics",
+    "Nvie Designs",
+    "Minus33 Merino Wool",
+    "Tasso Elba",
+    "Jezebel",
+    "Aeropostale",
+    "Berkshire",
+    "Joie",
+    "Cashmere Boutique",
+    "dollhouse",
+    "US Fairytailes",
+    "Full Tilt",
+    "Funfash",
+    "FEA",
+    "YogaColors",
+    "ililily",
+    "Ulla Popken",
+    "Coquette",
+    "Hard Tail",
+    "High Style",
+    "DL1961",
+    "Famous Stars and Straps",
+    "Walls",
+    "HOBO",
+    "Jerzees",
+    "Jessica Howard",
+    "Mavi",
+    "Mommy Paradise",
+    "D.E.P.T.",
+    "Miss Me",
+    "Lilly Pulitzer",
+    "Marc New York by Andrew Marc",
+    "MAXSTUDIO",
+    "ZOO YORK",
+    "Lamaze",
+    "Jet Lag",
+    "WARMEN",
+    "Roma Costume",
+    "Beach Joy",
+    "BridalPetticoat",
+    "Seven7",
+    "Carrera",
+    "Spanx",
+    "Neon Buddha",
+    "MICHAEL Michael Kors",
+    "Becca by Rebecca Virtue",
+    "Reef",
+    "point6",
+    "Lindy Bop",
+    "Kate Spade",
+    "Le Mystere",
+    "Element",
+    "Barbour",
+    "HoodieBuddie",
+    "Marcoliani Milano",
+    "maxandcleo",
+    "Touch of Europe Flannel Pants",
+    "Kuhl",
+    "Ecko Unltd.",
+    "Canada Goose",
+    "2XU",
+    "WESC",
+    "LibbySue",
+    "TopTie",
+    "Chaus",
+    "Assets",
+    "Sweetheart Slips",
+    "Filson",
+    "SockGuy",
+    "Ozone",
+    "Snoozies",
+    "Stance",
+    "Vans",
+    "Parke & Ronen",
+    "Brixton",
+    "Disney",
+    "Tru-Spec",
+    "Jax",
+    "Kiyonna",
+    "ANS",
+    "N2N",
+    "New Balance",
+    "Oak Hill",
+    "Maternal America",
+    "Chestnut Hill",
+    "Lacoste",
+    "NOM",
+    "Via Spiga",
+    "Sheridyn Swim",
+    "Alex Stevens",
+    "Caterpillar",
+    "Oscar de la Renta",
+    "Cuddl Duds",
+    "Rufskin",
+    "Skedouche",
+    "Christopher Fischer",
+    "Cinema Etoile",
+    "Only Necessities",
+    "Arianne",
+    "Momo Maternity",
+    "National",
+    "Carnival",
+    "Vx Intimate Inc",
+    "Goddess",
+    "The Cat's Pajamas",
+    "XOXO",
+    "PACT",
+    "Tokidoki",
+    "Altamont",
+    "Popsi Lingerie"
+  ],
+  "locations": [
+    {
+      "city": "Newcastle-under-Lyme",
+      "state": "Staffordshire",
+      "country": "UK",
+      "zip": "ST5",
+      "lat": 53.0082,
+      "lon": -2.2443
+    },
+    {
+      "city": "Chelmsford",
+      "state": "Chelmsford",
+      "country": "UK",
+      "zip": "CM2",
+      "lat": 51.7244,
+      "lon": 0.4921
+    },
+    {
+      "city": "Bath",
+      "state": "Bath and North East Somerset",
+      "country": "UK",
+      "zip": "BA2",
+      "lat": 51.3574,
+      "lon": -2.3758
+    },
+    {
+      "city": "Stratford-Upon-Avon",
+      "state": "Stratford-on-Avon",
+      "country": "UK",
+      "zip": "CV37",
+      "lat": 52.1798,
+      "lon": -1.7202
+    },
+    {
+      "city": "Runcorn",
+      "state": "Halton",
+      "country": "UK",
+      "zip": "WA7",
+      "lat": 53.3301,
+      "lon": -2.6952
+    },
+    {
+      "city": "Redditch",
+      "state": "Redditch",
+      "country": "UK",
+      "zip": "B98",
+      "lat": 52.3027,
+      "lon": -1.9187
+    },
+    {
+      "city": "Durham",
+      "state": "County Durham",
+      "country": "UK",
+      "zip": "DH1",
+      "lat": 54.7822,
+      "lon": -1.5557
+    },
+    {
+      "city": "Upper Walthamstow",
+      "state": "Waltham Forest",
+      "country": "UK",
+      "zip": "E17",
+      "lat": 51.5922,
+      "lon": -0.0151
+    },
+    {
+      "city": "Livingston",
+      "state": "West Lothian",
+      "country": "UK",
+      "zip": "EH54",
+      "lat": 55.9009,
+      "lon": -3.5191
+    },
+    {
+      "city": "Barking",
+      "state": "Barking and Dagenham",
+      "country": "UK",
+      "zip": "IG11",
+      "lat": 51.5344,
+      "lon": 0.0998
+    },
+    {
+      "city": "North Stevenage",
+      "state": "Stevenage",
+      "country": "UK",
+      "zip": "SG1",
+      "lat": 51.9156,
+      "lon": -0.1967
+    },
+    {
+      "city": "Ruislip",
+      "state": "Hillingdon",
+      "country": "UK",
+      "zip": "HA4",
+      "lat": 51.5633,
+      "lon": -0.4108
+    },
+    {
+      "city": "Ilford",
+      "state": "Redbridge",
+      "country": "UK",
+      "zip": "IG1",
+      "lat": 51.5578,
+      "lon": 0.0698
+    },
+    {
+      "city": "Harrogate",
+      "state": "Harrogate",
+      "country": "UK",
+      "zip": "HG2",
+      "lat": 53.9934,
+      "lon": -1.5196
+    },
+    {
+      "city": "Edgware",
+      "state": "Harrow",
+      "country": "UK",
+      "zip": "HA8",
+      "lat": 51.6037,
+      "lon": -0.2771
+    },
+    {
+      "city": "Thornton-Cleveleys",
+      "state": "Wyre",
+      "country": "UK",
+      "zip": "FY5",
+      "lat": 53.8767,
+      "lon": -3.0173
+    },
+    {
+      "city": "Whitley",
+      "state": "Berkshire",
+      "country": "UK",
+      "zip": "RG2",
+      "lat": 51.4217,
+      "lon": -0.9636
+    },
+    {
+      "city": "Tottenham",
+      "state": "Haringey",
+      "country": "UK",
+      "zip": "N17",
+      "lat": 51.5979,
+      "lon": -0.0624
+    },
+    {
+      "city": "Loughborough",
+      "state": "Charnwood",
+      "country": "UK",
+      "zip": "LE11",
+      "lat": 52.77,
+      "lon": -1.2195
+    },
+    {
+      "city": "Dunfermline",
+      "state": "Fife",
+      "country": "UK",
+      "zip": "KY12",
+      "lat": 56.0799,
+      "lon": -3.4825
+    },
+    {
+      "city": "Cwmbran",
+      "state": "Torfaen",
+      "country": "UK",
+      "zip": "NP44",
+      "lat": 51.6518,
+      "lon": -3.0275
+    },
+    {
+      "city": "Thetford",
+      "state": "Breckland",
+      "country": "UK",
+      "zip": "IP24",
+      "lat": 52.4174,
+      "lon": 0.7478
+    },
+    {
+      "city": "Gravesend (east)",
+      "state": "Gravesham",
+      "country": "UK",
+      "zip": "DA12",
+      "lat": 51.4265,
+      "lon": 0.3833
+    },
+    {
+      "city": "Peckham",
+      "state": "Lewisham",
+      "country": "UK",
+      "zip": "SE15",
+      "lat": 51.4779,
+      "lon": -0.0605
+    },
+    {
+      "city": "Billingham (East)",
+      "state": "Stockton-on-Tees",
+      "country": "UK",
+      "zip": "TS23",
+      "lat": 54.6077,
+      "lon": -1.2918
+    },
+    {
+      "city": "Stroud",
+      "state": "Stroud",
+      "country": "UK",
+      "zip": "GL5",
+      "lat": 51.7439,
+      "lon": -2.2267
+    },
+    {
+      "city": "Cambridge (North)",
+      "state": "Cambridge",
+      "country": "UK",
+      "zip": "CB4",
+      "lat": 52.2424,
+      "lon": 0.1174
+    },
+    {
+      "city": "Woolwich",
+      "state": "Greenwich",
+      "country": "UK",
+      "zip": "SE18",
+      "lat": 51.4808,
+      "lon": 0.0784
+    },
+    {
+      "city": "North Hereford",
+      "state": "Hereford",
+      "country": "UK",
+      "zip": "HR4",
+      "lat": 52.0768,
+      "lon": -2.7529
+    },
+    {
+      "city": "Palmers Green",
+      "state": "Enfield",
+      "country": "UK",
+      "zip": "N13",
+      "lat": 51.6222,
+      "lon": -0.0996
+    },
+    {
+      "city": "Thornton Heath",
+      "state": "Croydon",
+      "country": "UK",
+      "zip": "CR7",
+      "lat": 51.3962,
+      "lon": -0.0999
+    },
+    {
+      "city": "Paisley (South)",
+      "state": "Renfrewshire",
+      "country": "UK",
+      "zip": "PA2",
+      "lat": 55.8293,
+      "lon": -4.4431
+    },
+    {
+      "city": "Bradwell",
+      "state": "Norfolk",
+      "country": "UK",
+      "zip": "NR31",
+      "lat": 52.5713,
+      "lon": 1.7057
+    },
+    {
+      "city": "Handsworth",
+      "state": "Birmingham",
+      "country": "UK",
+      "zip": "B21",
+      "lat": 52.5142,
+      "lon": -1.9375
+    },
+    {
+      "city": "Letchworth",
+      "state": "North Hertfordshire",
+      "country": "UK",
+      "zip": "SG6",
+      "lat": 51.9732,
+      "lon": -0.2267
+    },
+    {
+      "city": "Clapham Junction",
+      "state": "Wandsworth",
+      "country": "UK",
+      "zip": "SW11",
+      "lat": 51.4583,
+      "lon": -0.1735
+    },
+    {
+      "city": "Eastleigh Town Centre",
+      "state": "Eastleigh",
+      "country": "UK",
+      "zip": "SO50",
+      "lat": 50.9685,
+      "lon": -1.3407
+    },
+    {
+      "city": "Urmston",
+      "state": "Trafford",
+      "country": "UK",
+      "zip": "M41",
+      "lat": 53.4492,
+      "lon": -2.3557
+    },
+    {
+      "city": "Weymouth",
+      "state": "Weymouth and Portland",
+      "country": "UK",
+      "zip": "DT4",
+      "lat": 50.6121,
+      "lon": -2.4645
+    },
+    {
+      "city": "Stanmore",
+      "state": "Harrow",
+      "country": "UK",
+      "zip": "HA7",
+      "lat": 51.6105,
+      "lon": -0.3095
+    },
+    {
+      "city": "Pembroke Pines",
+      "state": "Florida",
+      "country": "USA",
+      "zip": "33082",
+      "lat": 26.1509,
+      "lon": -80.4451
+    },
+    {
+      "city": "Fairfield",
+      "state": "California",
+      "country": "USA",
+      "zip": "94533",
+      "lat": 38.2697,
+      "lon": -122.0166
+    },
+    {
+      "city": "Baldwin Park",
+      "state": "California",
+      "country": "USA",
+      "zip": "91706",
+      "lat": 33.7947,
+      "lon": -118.2987
+    },
+    {
+      "city": "Menifee",
+      "state": "California",
+      "country": "USA",
+      "zip": "92584",
+      "lat": 33.7546,
+      "lon": -116.0604
+    },
+    {
+      "city": "Santa Clarita",
+      "state": "California",
+      "country": "USA",
+      "zip": "91350",
+      "lat": 33.817,
+      "lon": -118.3203
+    },
+    {
+      "city": "Santa Clarita",
+      "state": "California",
+      "country": "USA",
+      "zip": "91380",
+      "lat": 33.814,
+      "lon": -118.2678
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10005",
+      "lat": 40.7231,
+      "lon": -74.0249
+    },
+    {
+      "city": "Newton",
+      "state": "Massachusetts",
+      "country": "USA",
+      "zip": "02458",
+      "lat": 42.3939,
+      "lon": -71.2061
+    },
+    {
+      "city": "Lake Forest",
+      "state": "California",
+      "country": "USA",
+      "zip": "92630",
+      "lat": 33.6376,
+      "lon": -117.688
+    },
+    {
+      "city": "Union City",
+      "state": "New Jersey",
+      "country": "USA",
+      "zip": "07087",
+      "lat": 40.7617,
+      "lon": -74.0555
+    },
+    {
+      "city": "Union City",
+      "state": "California",
+      "country": "USA",
+      "zip": "94587",
+      "lat": 37.5817,
+      "lon": -121.9704
+    },
+    {
+      "city": "Avondale",
+      "state": "Arizona",
+      "country": "USA",
+      "zip": "85323",
+      "lat": 33.2827,
+      "lon": -112.1923
+    },
+    {
+      "city": "Malden",
+      "state": "Massachusetts",
+      "country": "USA",
+      "zip": "02148",
+      "lat": 42.4314,
+      "lon": -71.0804
+    },
+    {
+      "city": "Pico Rivera",
+      "state": "California",
+      "country": "USA",
+      "zip": "90660",
+      "lat": 33.9921,
+      "lon": -118.0969
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10111",
+      "lat": 40.7754,
+      "lon": -74.0049
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10098",
+      "lat": 40.7451,
+      "lon": -73.9873
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10019",
+      "lat": 40.7463,
+      "lon": -74.0032
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10153",
+      "lat": 40.7332,
+      "lon": -74.0071
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10129",
+      "lat": 40.8008,
+      "lon": -73.9695
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10163",
+      "lat": 40.7906,
+      "lon": -73.9485
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10011",
+      "lat": 40.7143,
+      "lon": -74.0183
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10103",
+      "lat": 40.7804,
+      "lon": -73.945
+    },
+    {
+      "city": "Passaic",
+      "state": "New Jersey",
+      "country": "USA",
+      "zip": "07055",
+      "lat": 40.8524,
+      "lon": -74.1231
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10165",
+      "lat": 40.7734,
+      "lon": -73.9574
+    },
+    {
+      "city": "South Gate",
+      "state": "California",
+      "country": "USA",
+      "zip": "90280",
+      "lat": 33.9383,
+      "lon": -118.1903
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10029",
+      "lat": 40.7656,
+      "lon": -73.9379
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10060",
+      "lat": 40.8007,
+      "lon": -73.9676
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10095",
+      "lat": 40.7433,
+      "lon": -73.9573
+    },
+    {
+      "city": "Cicero",
+      "state": "Illinois",
+      "country": "USA",
+      "zip": "60804",
+      "lat": 41.8126,
+      "lon": -87.6864
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10025",
+      "lat": 40.7886,
+      "lon": -73.977
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10175",
+      "lat": 40.7439,
+      "lon": -73.9921
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10072",
+      "lat": 40.7554,
+      "lon": -73.9702
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10018",
+      "lat": 40.7673,
+      "lon": -74.0087
+    },
+    {
+      "city": "Gilbert",
+      "state": "Arizona",
+      "country": "USA",
+      "zip": "85234",
+      "lat": 33.3616,
+      "lon": -111.7946
+    },
+    {
+      "city": "Fishers",
+      "state": "Indiana",
+      "country": "USA",
+      "zip": "46038",
+      "lat": 39.9626,
+      "lon": -85.9663
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10154",
+      "lat": 40.7372,
+      "lon": -73.9952
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10106",
+      "lat": 40.787,
+      "lon": -74.0104
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10159",
+      "lat": 40.8163,
+      "lon": -73.9473
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10272",
+      "lat": 40.7744,
+      "lon": -73.9975
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10199",
+      "lat": 40.7858,
+      "lon": -73.9948
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10276",
+      "lat": 40.7993,
+      "lon": -73.9647
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10122",
+      "lat": 40.7209,
+      "lon": -74.0034
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10286",
+      "lat": 40.687,
+      "lon": -74.005
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10258",
+      "lat": 40.8102,
+      "lon": -73.976
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10171",
+      "lat": 40.7295,
+      "lon": -73.9502
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10028",
+      "lat": 40.8125,
+      "lon": -73.96
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10037",
+      "lat": 40.7987,
+      "lon": -73.9165
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10128",
+      "lat": 40.777,
+      "lon": -73.9229
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10150",
+      "lat": 40.7749,
+      "lon": -73.9816
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10114",
+      "lat": 40.7505,
+      "lon": -73.9708
+    },
+    {
+      "city": "Gilbert",
+      "state": "Arizona",
+      "country": "USA",
+      "zip": "85296",
+      "lat": 33.3207,
+      "lon": -111.7774
+    },
+    {
+      "city": "Chicago",
+      "state": "Illinois",
+      "country": "USA",
+      "zip": "60631",
+      "lat": 42.0188,
+      "lon": -87.8082
+    },
+    {
+      "city": "Bayonne",
+      "state": "New Jersey",
+      "country": "USA",
+      "zip": "07002",
+      "lat": 40.6786,
+      "lon": -74.1118
+    },
+    {
+      "city": "Huntington Park",
+      "state": "California",
+      "country": "USA",
+      "zip": "90255",
+      "lat": 33.98,
+      "lon": -118.2212
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10080",
+      "lat": 40.7483,
+      "lon": -73.9678
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10046",
+      "lat": 40.8109,
+      "lon": -74.0067
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10279",
+      "lat": 40.7229,
+      "lon": -73.9772
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10133",
+      "lat": 40.7659,
+      "lon": -74.0107
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10118",
+      "lat": 40.7426,
+      "lon": -74.0005
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10022",
+      "lat": 40.7563,
+      "lon": -73.9807
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10021",
+      "lat": 40.7738,
+      "lon": -73.9493
+    },
+    {
+      "city": "Gilbert",
+      "state": "Arizona",
+      "country": "USA",
+      "zip": "85233",
+      "lat": 33.3528,
+      "lon": -111.8414
+    },
+    {
+      "city": "Los Angeles",
+      "state": "California",
+      "country": "USA",
+      "zip": "90058",
+      "lat": 34.0138,
+      "lon": -118.179
+    },
+    {
+      "city": "Los Angeles",
+      "state": "California",
+      "country": "USA",
+      "zip": "90064",
+      "lat": 33.7982,
+      "lon": -118.3278
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10292",
+      "lat": 40.7837,
+      "lon": -73.9456
+    },
+    {
+      "city": "Medford",
+      "state": "Massachusetts",
+      "country": "USA",
+      "zip": "02155",
+      "lat": 42.4139,
+      "lon": -71.1073
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10149",
+      "lat": 40.7488,
+      "lon": -73.9441
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10094",
+      "lat": 40.7565,
+      "lon": -73.9849
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10015",
+      "lat": 40.7875,
+      "lon": -73.9649
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10161",
+      "lat": 40.7633,
+      "lon": -73.9825
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10110",
+      "lat": 40.7864,
+      "lon": -73.9625
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10162",
+      "lat": 40.7908,
+      "lon": -73.9536
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10041",
+      "lat": 40.6866,
+      "lon": -74.0186
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10260",
+      "lat": 40.7453,
+      "lon": -73.9614
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10131",
+      "lat": 40.8159,
+      "lon": -74.0035
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10124",
+      "lat": 40.7545,
+      "lon": -73.9815
+    },
+    {
+      "city": "Taylor",
+      "state": "Michigan",
+      "country": "USA",
+      "zip": "48180",
+      "lat": 42.2481,
+      "lon": -83.2492
+    },
+    {
+      "city": "Minnetonka",
+      "state": "Minnesota",
+      "country": "USA",
+      "zip": "55345",
+      "lat": 44.9155,
+      "lon": -93.4873
+    },
+    {
+      "city": "Taunton",
+      "state": "Massachusetts",
+      "country": "USA",
+      "zip": "02780",
+      "lat": 41.8577,
+      "lon": -71.0869
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10001",
+      "lat": 40.7178,
+      "lon": -74.0226
+    },
+    {
+      "city": "West New York",
+      "state": "New Jersey",
+      "country": "USA",
+      "zip": "07093",
+      "lat": 40.7833,
+      "lon": -74.0047
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10126",
+      "lat": 40.799,
+      "lon": -73.9563
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10281",
+      "lat": 40.7454,
+      "lon": -74.0216
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10003",
+      "lat": 40.7309,
+      "lon": -74.0237
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10024",
+      "lat": 40.8405,
+      "lon": -73.9425
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10026",
+      "lat": 40.7818,
+      "lon": -73.9218
+    },
+    {
+      "city": "West Haven",
+      "state": "Connecticut",
+      "country": "USA",
+      "zip": "06516",
+      "lat": 41.2797,
+      "lon": -72.9424
+    },
+    {
+      "city": "Ontario",
+      "state": "California",
+      "country": "USA",
+      "zip": "91761",
+      "lat": 34.8534,
+      "lon": -115.9359
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10087",
+      "lat": 40.7702,
+      "lon": -73.9587
+    },
+    {
+      "city": "Montebello",
+      "state": "California",
+      "country": "USA",
+      "zip": "90640",
+      "lat": 33.7955,
+      "lon": -118.304
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10014",
+      "lat": 40.7277,
+      "lon": -74.0406
+    },
+    {
+      "city": "Methuen",
+      "state": "Massachusetts",
+      "country": "USA",
+      "zip": "01844",
+      "lat": 42.734,
+      "lon": -71.1784
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10160",
+      "lat": 40.8139,
+      "lon": -73.9666
+    },
+    {
+      "city": "Pharr",
+      "state": "Texas",
+      "country": "USA",
+      "zip": "78577",
+      "lat": 26.1827,
+      "lon": -98.1318
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10002",
+      "lat": 40.7044,
+      "lon": -73.9726
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10020",
+      "lat": 40.7363,
+      "lon": -74.0162
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10032",
+      "lat": 40.872,
+      "lon": -73.9472
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10269",
+      "lat": 40.7827,
+      "lon": -73.9996
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10035",
+      "lat": 40.7954,
+      "lon": -73.9299
+    },
+    {
+      "city": "Diamond Bar",
+      "state": "California",
+      "country": "USA",
+      "zip": "91765",
+      "lat": 33.7839,
+      "lon": -118.2897
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10039",
+      "lat": 40.8101,
+      "lon": -73.9034
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10179",
+      "lat": 40.7695,
+      "lon": -73.9962
+    },
+    {
+      "city": "Rancho Santa Margarita",
+      "state": "California",
+      "country": "USA",
+      "zip": "92688",
+      "lat": 33.5933,
+      "lon": -117.6034
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10178",
+      "lat": 40.7461,
+      "lon": -73.9703
+    },
+    {
+      "city": "Pittsburg",
+      "state": "California",
+      "country": "USA",
+      "zip": "94565",
+      "lat": 38.0007,
+      "lon": -121.9133
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10282",
+      "lat": 40.7426,
+      "lon": -73.9814
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10004",
+      "lat": 40.7086,
+      "lon": -74.0387
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10156",
+      "lat": 40.8143,
+      "lon": -73.9761
+    },
+    {
+      "city": "Tinley Park",
+      "state": "Illinois",
+      "country": "USA",
+      "zip": "60477",
+      "lat": 42.1514,
+      "lon": -88.0235
+    },
+    {
+      "city": "San Ramon",
+      "state": "California",
+      "country": "USA",
+      "zip": "94583",
+      "lat": 37.7745,
+      "lon": -121.9785
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10185",
+      "lat": 40.7819,
+      "lon": -74.0074
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10125",
+      "lat": 40.7575,
+      "lon": -73.9561
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10113",
+      "lat": 40.807,
+      "lon": -73.999
+    },
+    {
+      "city": "Martinez",
+      "state": "California",
+      "country": "USA",
+      "zip": "94553",
+      "lat": 37.9908,
+      "lon": -122.1325
+    },
+    {
+      "city": "Elk Grove",
+      "state": "California",
+      "country": "USA",
+      "zip": "95758",
+      "lat": 38.3327,
+      "lon": -121.4011
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10176",
+      "lat": 40.7436,
+      "lon": -73.9492
+    },
+    {
+      "city": "Wylie",
+      "state": "Texas",
+      "country": "USA",
+      "zip": "75098",
+      "lat": 32.9647,
+      "lon": -96.5456
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10013",
+      "lat": 40.7323,
+      "lon": -73.9865
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10006",
+      "lat": 40.6908,
+      "lon": -74.0285
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10259",
+      "lat": 40.7706,
+      "lon": -73.9984
+    },
+    {
+      "city": "Los Angeles",
+      "state": "California",
+      "country": "USA",
+      "zip": "90033",
+      "lat": 33.7553,
+      "lon": -118.3334
+    },
+    {
+      "city": "Lynwood",
+      "state": "California",
+      "country": "USA",
+      "zip": "90262",
+      "lat": 33.9255,
+      "lon": -118.202
+    },
+    {
+      "city": "Mentor",
+      "state": "Ohio",
+      "country": "USA",
+      "zip": "44060",
+      "lat": 41.6851,
+      "lon": -81.3231
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10151",
+      "lat": 40.7717,
+      "lon": -73.9463
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10132",
+      "lat": 40.7722,
+      "lon": -73.9435
+    },
+    {
+      "city": "Paramount",
+      "state": "California",
+      "country": "USA",
+      "zip": "90723",
+      "lat": 33.9026,
+      "lon": -118.1703
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10045",
+      "lat": 40.7128,
+      "lon": -74.0037
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10101",
+      "lat": 40.7788,
+      "lon": -73.9463
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10033",
+      "lat": 40.8466,
+      "lon": -73.9004
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10211",
+      "lat": 40.7671,
+      "lon": -73.9947
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10038",
+      "lat": 40.7002,
+      "lon": -74.022
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10010",
+      "lat": 40.7614,
+      "lon": -74.0114
+    },
+    {
+      "city": "Yonkers",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10705",
+      "lat": 40.9126,
+      "lon": -73.8704
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10152",
+      "lat": 40.7609,
+      "lon": -73.9525
+    },
+    {
+      "city": "Hoboken",
+      "state": "New Jersey",
+      "country": "USA",
+      "zip": "07030",
+      "lat": 40.7527,
+      "lon": -74.0412
+    },
+    {
+      "city": "Thousand Oaks",
+      "state": "California",
+      "country": "USA",
+      "zip": "91358",
+      "lat": 34.066,
+      "lon": -119.115
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10069",
+      "lat": 40.7601,
+      "lon": -73.9848
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10249",
+      "lat": 40.8035,
+      "lon": -74.0009
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10277",
+      "lat": 40.7752,
+      "lon": -73.9744
+    },
+    {
+      "city": "Huntington Beach",
+      "state": "California",
+      "country": "USA",
+      "zip": "92646",
+      "lat": 33.6564,
+      "lon": -117.7619
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10099",
+      "lat": 40.8137,
+      "lon": -74.0008
+    },
+    {
+      "city": "Chicago",
+      "state": "Illinois",
+      "country": "USA",
+      "zip": "60603",
+      "lat": 42.0564,
+      "lon": -87.7135
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10017",
+      "lat": 40.7559,
+      "lon": -73.9661
+    },
+    {
+      "city": "Chino Hills",
+      "state": "California",
+      "country": "USA",
+      "zip": "91709",
+      "lat": 34.847,
+      "lon": -115.9739
+    },
+    {
+      "city": "Los Angeles",
+      "state": "California",
+      "country": "USA",
+      "zip": "90023",
+      "lat": 34.0051,
+      "lon": -118.227
+    },
+    {
+      "city": "East Providence",
+      "state": "Rhode Island",
+      "country": "USA",
+      "zip": "02914",
+      "lat": 41.8181,
+      "lon": -71.3691
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10107",
+      "lat": 40.7848,
+      "lon": -73.9647
+    },
+    {
+      "city": "Port Orange",
+      "state": "Florida",
+      "country": "USA",
+      "zip": "32129",
+      "lat": 29.0162,
+      "lon": -81.1699
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10173",
+      "lat": 40.7794,
+      "lon": -73.9889
+    },
+    {
+      "city": "Pearland",
+      "state": "Texas",
+      "country": "USA",
+      "zip": "77584",
+      "lat": 29.5607,
+      "lon": -95.3342
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10040",
+      "lat": 40.8571,
+      "lon": -73.9396
+    },
+    {
+      "city": "Los Angeles",
+      "state": "California",
+      "country": "USA",
+      "zip": "90039",
+      "lat": 33.8072,
+      "lon": -118.2731
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10108",
+      "lat": 40.8013,
+      "lon": -73.9524
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10285",
+      "lat": 40.7062,
+      "lon": -73.9849
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10031",
+      "lat": 40.8158,
+      "lon": -73.9539
+    },
+    {
+      "city": "Lakeville",
+      "state": "Minnesota",
+      "country": "USA",
+      "zip": "55044",
+      "lat": 44.6329,
+      "lon": -93.2647
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10023",
+      "lat": 40.8051,
+      "lon": -74.0051
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10270",
+      "lat": 40.6862,
+      "lon": -74.0162
+    },
+    {
+      "city": "New York",
+      "state": "New York",
+      "country": "USA",
+      "zip": "10169",
+      "lat": 40.7645,
+      "lon": -73.9541
+    },
+    {
+      "city": "Los Angeles",
+      "state": "California",
+      "country": "USA",
+      "zip": "90006",
+      "lat": 33.7773,
+      "lon": -118.2885
+    }
+  ]
+}
