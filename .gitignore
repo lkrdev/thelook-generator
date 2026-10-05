@@ -1,5 +1,7 @@
 thelook
+thelook-generator
 state.gob
 state.gob.tmp
 profile.json
 commands.jsonl
+.env
