@@ -395,13 +395,6 @@ func cmdBackfill(args []string) error {
 		reportInterval = 10080
 	}
 
-	max0 := func(v int64) int64 {
-		if v < 0 {
-			return 0
-		}
-		return v
-	}
-
 	printProgress := func(cur time.Time, minuteIdx, steps, skipped int) {
 		pct := float64(minuteIdx) / float64(totalMinutes) * 100
 		elapsed := time.Since(startTime)
@@ -412,79 +405,64 @@ func cmdBackfill(args []string) error {
 			etaStr = fmt.Sprintf(" | ETA: %s", (time.Duration(remSec) * time.Second).Round(time.Second))
 		}
 		fmt.Fprintf(os.Stderr, "--> [backfill] %s | %5.1f%% (%d/%d min) | Orders: %d, Events: %d, Users: %d, Products: %d (%.0f min/s%s)\n",
-			model.FmtTS(cur), pct, minuteIdx, totalMinutes, max0(st.NextOrderID-1), max0(st.NextEventID-1), max0(st.NextUserID-1), max0(st.NextProductID-1), rate, etaStr)
+			model.FmtTS(cur), pct, minuteIdx, totalMinutes, max(0, st.NextOrderID-1), max(0, st.NextEventID-1), max(0, st.NextUserID-1), max(0, st.NextProductID-1), rate, etaStr)
 	}
+
+	var emitFn func(any)
+	var flushBatch func(cur time.Time) error
+	var finish func(steps, skipped int) error
+	batchInterval := 14400
 
 	if *stdout {
 		emitter := NewJSONEmitter(os.Stdout, *rate)
-		steps, skipped, minuteIdx := 0, 0, 0
-		for cur := fromTime; !cur.After(toTime); cur = cur.Add(time.Minute) {
-			minuteIdx++
-			if !*force && st.IsMinuteCovered(cur) {
-				skipped++
-				if minuteIdx%reportInterval == 0 || cur.Equal(toTime) {
-					printProgress(cur, minuteIdx, steps, skipped)
-				}
-				continue
-			}
-			eng.Tick(cur, *initialProducts, emitter.Emit)
-			steps++
-			if steps%1440 == 0 {
-				_ = emitter.Flush()
-				_ = st.Save(*statePath)
-			}
-			if minuteIdx%reportInterval == 0 || cur.Equal(toTime) {
-				printProgress(cur, minuteIdx, steps, skipped)
-			}
+		emitFn = emitter.Emit
+		batchInterval = 1440
+		flushBatch = func(time.Time) error { return emitter.Flush() }
+		finish = func(steps, skipped int) error {
+			_ = emitter.Flush()
+			fmt.Fprintf(os.Stderr, "==> [backfill] Completed in %s! Generated %d steps (%d skipped).\n",
+				time.Since(startTime).Round(time.Second), steps, skipped)
+			return nil
 		}
-		_ = emitter.Flush()
-		fmt.Fprintf(os.Stderr, "==> [backfill] Completed in %s! Generated %d steps (%d skipped).\n",
-			time.Since(startTime).Round(time.Second), steps, skipped)
-		return st.Save(*statePath)
-	}
-
-	if isPostgres() {
+	} else if isPostgres() {
 		sink, err := postgres.NewSink(context.Background(), "", postgresSchema(""))
 		if err != nil {
 			return err
 		}
 		defer sink.Close()
-		steps, skipped, minuteIdx := 0, 0, 0
-		for cur := fromTime; !cur.After(toTime); cur = cur.Add(time.Minute) {
-			minuteIdx++
-			if !*force && st.IsMinuteCovered(cur) {
-				skipped++
-				if minuteIdx%reportInterval == 0 || cur.Equal(toTime) {
-					printProgress(cur, minuteIdx, steps, skipped)
-				}
-				continue
-			}
-			eng.Tick(cur, *initialProducts, sink.Emit)
-			steps++
-			if steps%14400 == 0 {
-				fmt.Fprintf(os.Stderr, "    [backfill] Flushing batch to %s at %s...\n", targetDesc, model.FmtTS(cur))
-				if err := sink.Flush(); err != nil {
-					return err
-				}
-				_ = st.Save(*statePath)
-			}
-			if minuteIdx%reportInterval == 0 || cur.Equal(toTime) {
-				printProgress(cur, minuteIdx, steps, skipped)
-			}
+		emitFn = sink.Emit
+		flushBatch = func(cur time.Time) error {
+			fmt.Fprintf(os.Stderr, "    [backfill] Flushing batch to %s at %s...\n", targetDesc, model.FmtTS(cur))
+			return sink.Flush()
 		}
-		fmt.Fprintf(os.Stderr, "    [backfill] Final batch flush to %s...\n", targetDesc)
-		if err := sink.Flush(); err != nil {
+		finish = func(steps, skipped int) error {
+			fmt.Fprintf(os.Stderr, "    [backfill] Final batch flush to %s...\n", targetDesc)
+			if err := sink.Flush(); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "==> [backfill] Completed in %s! Generated %d steps (%d skipped) into %s. Final state: %d products, %d users, %d orders, %d events.\n",
+				time.Since(startTime).Round(time.Second), steps, skipped, targetDesc, max(0, st.NextProductID-1), max(0, st.NextUserID-1), max(0, st.NextOrderID-1), max(0, st.NextEventID-1))
+			return nil
+		}
+	} else {
+		sink, err := bq.NewBatchLoadSink(os.Getenv("GCP_PROJECT"), os.Getenv("GCP_DATASET"))
+		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "==> [backfill] Completed in %s! Generated %d steps (%d skipped) into %s. Final state: %d products, %d users, %d orders, %d events.\n",
-			time.Since(startTime).Round(time.Second), steps, skipped, targetDesc, max0(st.NextProductID-1), max0(st.NextUserID-1), max0(st.NextOrderID-1), max0(st.NextEventID-1))
-		return st.Save(*statePath)
+		emitFn = sink.Emit
+		flushBatch = func(time.Time) error { return nil }
+		finish = func(steps, skipped int) error {
+			fmt.Fprintf(os.Stderr, "==> [backfill] Simulation finished in %s (%d minutes simulated, %d skipped). Loading tables into BigQuery via bq load...\n",
+				time.Since(startTime).Round(time.Second), steps, skipped)
+			if err := sink.FlushAndLoad(); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "==> [backfill] Completed in %s! All tables loaded into %s. Final state: %d products, %d users, %d orders, %d events.\n",
+				time.Since(startTime).Round(time.Second), targetDesc, max(0, st.NextProductID-1), max(0, st.NextUserID-1), max(0, st.NextOrderID-1), max(0, st.NextEventID-1))
+			return nil
+		}
 	}
 
-	sink, err := bq.NewBatchLoadSink(os.Getenv("GCP_PROJECT"), os.Getenv("GCP_DATASET"))
-	if err != nil {
-		return err
-	}
 	steps, skipped, minuteIdx := 0, 0, 0
 	for cur := fromTime; !cur.After(toTime); cur = cur.Add(time.Minute) {
 		minuteIdx++
@@ -495,22 +473,22 @@ func cmdBackfill(args []string) error {
 			}
 			continue
 		}
-		eng.Tick(cur, *initialProducts, sink.Emit)
+		eng.Tick(cur, *initialProducts, emitFn)
 		steps++
-		if steps%14400 == 0 {
+		if steps%batchInterval == 0 {
+			if err := flushBatch(cur); err != nil {
+				return err
+			}
 			_ = st.Save(*statePath)
 		}
 		if minuteIdx%reportInterval == 0 || cur.Equal(toTime) {
 			printProgress(cur, minuteIdx, steps, skipped)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "==> [backfill] Simulation finished in %s (%d minutes simulated, %d skipped). Loading tables into BigQuery via bq load...\n",
-		time.Since(startTime).Round(time.Second), steps, skipped)
-	if err := sink.FlushAndLoad(); err != nil {
+
+	if err := finish(steps, skipped); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "==> [backfill] Completed in %s! All tables loaded into %s. Final state: %d products, %d users, %d orders, %d events.\n",
-		time.Since(startTime).Round(time.Second), targetDesc, max0(st.NextProductID-1), max0(st.NextUserID-1), max0(st.NextOrderID-1), max0(st.NextEventID-1))
 	return st.Save(*statePath)
 }
 

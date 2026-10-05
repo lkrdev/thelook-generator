@@ -197,9 +197,6 @@ To connect Looker Core Hybrid to AlloyDB:
    ```
 4. Set the Looker connection host to `alloydb.thelook.internal` (port 5432).
 
-
----
-
 ## Manual Quick start
 
 ### BigQuery
