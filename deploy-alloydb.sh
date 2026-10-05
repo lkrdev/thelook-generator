@@ -354,7 +354,6 @@ if [[ "${SETUP_LOOKER}" == "true" ]]; then
       gcloud compute network-endpoint-groups create "${PSC_NEG_NAME}" \
         --region="${LOOKER_REGION}" \
         --network-endpoint-type=internet-ip-port \
-        --network="${LOOKER_NETWORK}" \
         --project="${PROJECT}" --quiet >/dev/null 2>&1 || true
       sleep 3
       gcloud compute network-endpoint-groups update "${PSC_NEG_NAME}" \

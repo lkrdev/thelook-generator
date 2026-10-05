@@ -417,7 +417,12 @@ func cmdBackfill(args []string) error {
 		emitter := NewJSONEmitter(os.Stdout, *rate)
 		emitFn = emitter.Emit
 		batchInterval = 1440
-		flushBatch = func(time.Time) error { return emitter.Flush() }
+		flushBatch = func(time.Time) error {
+			if err := emitter.Flush(); err != nil {
+				return err
+			}
+			return st.Save(*statePath)
+		}
 		finish = func(steps, skipped int) error {
 			_ = emitter.Flush()
 			fmt.Fprintf(os.Stderr, "==> [backfill] Completed in %s! Generated %d steps (%d skipped).\n",
@@ -433,7 +438,10 @@ func cmdBackfill(args []string) error {
 		emitFn = sink.Emit
 		flushBatch = func(cur time.Time) error {
 			fmt.Fprintf(os.Stderr, "    [backfill] Flushing batch to %s at %s...\n", targetDesc, model.FmtTS(cur))
-			return sink.Flush()
+			if err := sink.Flush(); err != nil {
+				return err
+			}
+			return st.Save(*statePath)
 		}
 		finish = func(steps, skipped int) error {
 			fmt.Fprintf(os.Stderr, "    [backfill] Final batch flush to %s...\n", targetDesc)
@@ -479,7 +487,6 @@ func cmdBackfill(args []string) error {
 			if err := flushBatch(cur); err != nil {
 				return err
 			}
-			_ = st.Save(*statePath)
 		}
 		if minuteIdx%reportInterval == 0 || cur.Equal(toTime) {
 			printProgress(cur, minuteIdx, steps, skipped)
