@@ -143,42 +143,59 @@ git clone https://github.com/lkrdev/thelook-generator.git
 cd thelook-generator
 ```
 
-### Option A: Deploy to BigQuery
+### Option A: Deploy to BigQuery (Compute Engine VM)
 
-Creates a unique test dataset using `gcloud`/`bq`, builds the binary, deploys tables and retail calendar, backfills historical data, and starts live streaming CDC with the web status dashboard on port 8080:
+Provisions a Free Tier Compute Engine VM (`thelook-bq-gen`), creates the BigQuery dataset, deploys tables and retail calendar, backfills historical data, and runs live streaming CDC as a background systemd service:
 
 ```bash
-# 1. Testing (minimal backfill: 7 days, ~10 seconds - fast verification):
+# 1. Testing (minimal backfill: 7 days - deploys container by default):
 ./deploy-bq.sh
 
 # 2. Production (full backfill: 3650 days / 10 years):
 ./deploy-bq.sh --mode production
 
-# 3. Also register the `thelook_bq` BigQuery connection in Looker (prompts for Base URL, Client ID, and Client Secret):
+# 3. Explicitly build binary from source instead of container:
+./deploy-bq.sh --use-binary
+
+# 4. Also register the `thelook_bq` BigQuery connection in Looker (prompts for Base URL, Client ID, and Client Secret):
 ./deploy-bq.sh --looker
 ```
 
-In Cloud Shell, click **Web Preview** -> **Preview on port 8080** and enter the printed `SECRET` key to view the live dashboard.
-
 ### Option B: Deploy to AlloyDB (Separate Compute Engine VM)
 
-Minimally provisions an AlloyDB cluster and 1-vCPU single-zone primary instance (`c4a-highmem-1`, `ZONAL`), configures VPC Private Services Access peering, and provisions a Free Tier Compute Engine VM (`e2-micro` with 2 GB swap) that deploys the schema, runs backfill, and runs the streaming generator as a systemd service:
+Minimally provisions an AlloyDB cluster and 1-vCPU single-zone primary instance (`c4a-highmem-1`, `ZONAL`), configures VPC Private Services Access peering, and provisions a Free Tier Compute Engine VM (`thelook-alloydb-gen`, `e2-micro` with 2 GB swap) that deploys the schema, runs backfill, and runs the streaming generator as a systemd service:
 
 ```bash
-# 1. Testing (minimal backfill: 7 days, 1-vCPU ZONAL AlloyDB + Free Tier e2-micro GCE VM with 2GB swap):
+# 1. Testing (minimal backfill: 7 days, 1-vCPU ZONAL AlloyDB + Free Tier e2-micro GCE VM - deploys container by default):
 ./deploy-alloydb.sh
 
 # 2. Production (full backfill: 3650 days / 10 years):
 ./deploy-alloydb.sh --mode production
 
-# 3. Run pre-built container image (skips Go toolchain & compilation on the VM):
+# 3. Explicitly build binary from source instead of container:
+./deploy-alloydb.sh --use-binary
+
+# 4. Use custom container image:
 ./deploy-alloydb.sh --image us-central1-docker.pkg.dev/YOUR_PROJECT/thelook-generator/thelook-generator:latest
 
-# 4. Also whitelist Looker public_egress_ip_addresses on AlloyDB and register the `thelook_alloydb` Looker connection:
+# 5. Also whitelist Looker public_egress_ip_addresses on AlloyDB and register the `thelook_alloydb` Looker connection:
 ./deploy-alloydb.sh --looker
+
+# 6. Looker Core Hybrid / Private Service Connect (PSC) deployments:
+./deploy-alloydb.sh --looker --looker-host alloydb.thelook.internal
 ```
 
----
+#### Looker Core Hybrid / Private Service Connect (PSC) Deployments
+In a Looker Core Hybrid deployment (`controlledEgressEnabled: true`), Looker Core routes data egress exclusively over Private Service Connect (PSC) rather than public IP.
+To connect Looker Core Hybrid to AlloyDB:
+1. Create a dedicated PSC NAT subnet and Internal TCP Proxy in the Looker PSC VPC (`looker-psc-demo` in `us-east1`).
+2. Publish a PSC Service Attachment (e.g. `alloydb-svc-attachment`) forwarding TCP port `5432` to AlloyDB.
+3. Attach the service attachment to Looker with a local FQDN (`alloydb.thelook.internal`):
+   ```bash
+   gcloud looker instances update <INSTANCE_NAME> --region=<REGION> \
+     --psc-service-attachment=domain="alloydb.thelook.internal",attachment="projects/<PROJECT>/regions/<REGION>/serviceAttachments/alloydb-svc-attachment"
+   ```
+4. Set the Looker connection host to `alloydb.thelook.internal` (port 5432).
 
 ## Manual Quick start
 
