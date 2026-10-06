@@ -521,17 +521,21 @@ func TestPowerUsersTracking(t *testing.T) {
 
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	userEvents := make(map[int64]int)
+	maxSeq := int64(0)
 	emit := func(row any) {
 		switch r := row.(type) {
 		case model.EventRow:
 			if r.UserID != nil {
 				userEvents[*r.UserID]++
 			}
+			if r.SequenceNumber > maxSeq {
+				maxSeq = r.SequenceNumber
+			}
 		}
 	}
 
 	eng.Bootstrap(baseTime, 50, emit)
-	for m := 0; m < 1500; m++ {
+	for m := 0; m < 2500; m++ {
 		eng.Tick(baseTime.Add(time.Duration(m)*time.Minute), 50, emit)
 	}
 
@@ -540,6 +544,9 @@ func TestPowerUsersTracking(t *testing.T) {
 	}
 	if len(st.PowerUserIDs) == 0 {
 		t.Fatalf("expected power users to be tracked in state, got 0")
+	}
+	if maxSeq <= 5 {
+		t.Fatalf("expected extended sequence numbers > 5 for heavy browser sessions, got %d", maxSeq)
 	}
 
 	powerSet := make(map[int64]bool)

@@ -134,6 +134,7 @@ func CategorySeasonWeight(cat string, m time.Month) float64 {
 // - Other months fluctuate with an average MoM of ~10%, never dropping by more than 5%.
 // Across years, an annual compounding baseline provides steady organic expansion.
 func MonthlyGrowthMultiplier(t time.Time) float64 {
+	t = t.UTC()
 	year, month := t.Year(), int(t.Month())
 	rng := rand.New(rand.NewPCG(uint64(year), 0x5448454c4f4f4b))
 	hyperMonth := 2 + rng.IntN(9) // Pick random month between Feb (2) and Oct (10)
