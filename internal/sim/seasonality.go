@@ -3,6 +3,7 @@ package sim
 import (
 	"math"
 	"math/rand/v2"
+	"slices"
 	"time"
 )
 
@@ -153,4 +154,27 @@ func MonthlyGrowthMultiplier(t time.Time) float64 {
 	yIdx := max(0, year-2016)
 	base := 0.20 * math.Pow(1.30, math.Min(float64(yIdx), 10.0))
 	return math.Min(6.0, base*mult)
+}
+
+// FraudAnomalyMinutes returns 1 to 3 distinct minute-of-day offsets [0, 1439]
+// when fraudulent purchasing bursts occur on the given calendar date.
+func FraudAnomalyMinutes(t time.Time) []int {
+	t = t.UTC()
+	rng := rand.New(rand.NewPCG(uint64(t.Year())*1000+uint64(t.YearDay()), 0x4652415544))
+	k := 1 + rng.IntN(3) // 1, 2, or 3
+	mins := make([]int, 0, k)
+	for len(mins) < k {
+		m := rng.IntN(1440)
+		if !slices.Contains(mins, m) {
+			mins = append(mins, m)
+		}
+	}
+	return mins
+}
+
+// IsFraudAnomalyMinute reports whether a fraudulent customer anomaly is scheduled
+// during the given minute timestamp.
+func IsFraudAnomalyMinute(t time.Time) bool {
+	t = t.UTC()
+	return slices.Contains(FraudAnomalyMinutes(t), t.Hour()*60+t.Minute())
 }

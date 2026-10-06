@@ -357,6 +357,7 @@ func (e *Engine) completePurchase(buyTime time.Time, ci model.FunnelItem, emit f
 		SalePrice:       salePrice,
 		Status:          "Processing",
 		CreatedAt:       soldAtStr,
+		IsPrimaryItem:   true,
 	}
 	e.emitOrderAndTx(po, emit)
 	emit(model.CombinedOrdersUsersRow{
@@ -391,18 +392,25 @@ func (e *Engine) emitOrderAndTx(po model.PendingOrder, emit func(any)) {
 		DeliveredAt:     po.DeliveredAt,
 	})
 
-	u := e.State.Users[po.UserID-1]
+	items := po.OrderItems
+	if len(items) == 0 {
+		items = []model.TxItem{{
+			InventoryItemID: po.InventoryItemID,
+			ReturnedAt:      po.ReturnedAt,
+			SalePrice:       po.SalePrice,
+		}}
+	} else if !po.IsPrimaryItem {
+		return
+	}
+
+	u := e.lookupUser(po.UserID)
 	emit(model.TransactionDetailRow{
 		OrderID:     po.OrderID,
 		Status:      po.Status,
 		CreatedAt:   po.CreatedAt,
 		ShippedAt:   po.ShippedAt,
 		DeliveredAt: po.DeliveredAt,
-		Items: []model.TxItem{{
-			InventoryItemID: po.InventoryItemID,
-			ReturnedAt:      po.ReturnedAt,
-			SalePrice:       po.SalePrice,
-		}},
+		Items:       items,
 		User: model.TxUser{
 			UserID:        u.ID,
 			Name:          strings.ToUpper(u.FirstName + " " + u.LastName),
@@ -450,4 +458,148 @@ func (e *Engine) emitWebEvent(ts time.Time, sessionID string, seq int64, userID 
 		AdEventID:      adEventID,
 		ReferrerCode:   ref,
 	})
+}
+
+// pickFraudProducts selects count high-value products sampled without replacement
+// from the catalog, shuffling candidates so successive fraud orders do not repeat identical items.
+func (e *Engine) pickFraudProducts(count int) []model.ProductMeta {
+	for _, minPrice := range []float64{120.0, 60.0, 0.0} {
+		var pool []model.ProductMeta
+		for _, p := range e.State.Products {
+			if p.RetailPrice >= minPrice {
+				pool = append(pool, p)
+			}
+		}
+		if len(pool) >= count || minPrice == 0.0 {
+			e.rng.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+			return pool[:min(count, len(pool))]
+		}
+	}
+	return nil
+}
+
+// EmitFraudAnomaly executes a high-velocity multi-item fraudulent purchasing anomaly.
+// The perpetrator registers a direct account, immediately views and carts 6-12 high-value
+// items, and completes checkout as a single multi-item order.
+func (e *Engine) EmitFraudAnomaly(ts time.Time, emit func(any)) {
+	if len(e.State.Products) == 0 {
+		return
+	}
+
+	count := 6 + e.rng.IntN(7) // 6 to 12 items
+	prods := e.pickFraudProducts(count)
+	if len(prods) == 0 {
+		return
+	}
+
+	secOffset := e.rng.IntN(20)
+	evTime := ts.Add(time.Duration(secOffset) * time.Second)
+	loc := e.Seed.Locations[e.rng.IntN(len(e.Seed.Locations))]
+	u := e.signupUser(evTime, loc, emit)
+	sessionID := e.newUUID()
+	ob := osBrowsers[e.rng.IntN(len(osBrowsers))]
+	tsrc := "Direct"
+	if e.rng.Float64() < 0.30 {
+		tsrc = "Search"
+	}
+	userID := u.ID
+	uid := &userID
+
+	var seq int64 = 1
+	e.emitWebEvent(evTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, "/register", "Register", emit)
+
+	for _, p := range prods {
+		evTime = evTime.Add(time.Duration(1+e.rng.IntN(3)) * time.Second)
+		seq++
+		e.emitWebEvent(evTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, fmt.Sprintf("/product/%d", p.ID), "Product", emit)
+
+		evTime = evTime.Add(time.Duration(1+e.rng.IntN(2)) * time.Second)
+		seq++
+		e.emitWebEvent(evTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, "/cart", "Cart", emit)
+	}
+
+	buyTime := evTime.Add(time.Duration(2+e.rng.IntN(4)) * time.Second)
+	seq++
+	e.emitWebEvent(buyTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, "/purchase", "Purchase", emit)
+
+	orderID := e.State.NextOrderID
+	e.State.NextOrderID++
+	soldAtStr := model.FmtTS(buyTime)
+
+	var txItems []model.TxItem
+	var orderPendingItems []model.PendingOrder
+
+	for _, p := range prods {
+		avail := e.State.AvailableInventory[p.ID]
+		if len(avail) == 0 {
+			for i := 0; i < 2; i++ {
+				avail = append(avail, e.stockInventoryItem(p, buyTime, emit))
+			}
+		}
+		invID := avail[0]
+		e.State.AvailableInventory[p.ID] = avail[1:]
+
+		createdDate := e.State.InventoryCreated[invID]
+		if createdDate == "" {
+			createdDate = model.FmtDate(buyTime)
+		}
+
+		emit(model.InventoryItemRow{
+			ID:                          invID,
+			ProductID:                   p.ID,
+			CreatedAt:                   createdDate,
+			SoldAt:                      &soldAtStr,
+			Cost:                        p.Cost,
+			ProductCategory:             p.Category,
+			ProductName:                 p.Name,
+			ProductBrand:                p.Brand,
+			ProductRetailPrice:          p.RetailPrice,
+			ProductDepartment:           p.Department,
+			ProductSKU:                  p.SKU,
+			ProductDistributionCenterID: p.DCID,
+		})
+
+		oiID := e.State.NextOrderItemID
+		e.State.NextOrderItemID++
+
+		txItems = append(txItems, model.TxItem{
+			InventoryItemID: invID,
+			SalePrice:       p.RetailPrice,
+		})
+
+		orderPendingItems = append(orderPendingItems, model.PendingOrder{
+			OrderItemID:     oiID,
+			OrderID:         orderID,
+			UserID:          u.ID,
+			InventoryItemID: invID,
+			SalePrice:       p.RetailPrice,
+			Status:          "Processing",
+			CreatedAt:       soldAtStr,
+		})
+	}
+
+	isCancelled := e.rng.Float64() < 0.35
+	var nextStatus string
+	var nextDue int64
+	if isCancelled {
+		nextStatus = "Cancelled"
+		nextDue = buyTime.Unix() + int64(600+e.rng.IntN(3000))
+	} else {
+		nextStatus = "Shipped"
+		shipDays := 1 + e.rng.IntN(3)
+		if IsPeakLogistics(buyTime) {
+			shipDays = 3 + e.rng.IntN(5)
+		}
+		nextDue = buyTime.Unix() + int64(86400*shipDays)
+	}
+
+	for i := range orderPendingItems {
+		orderPendingItems[i].NextStatus = nextStatus
+		orderPendingItems[i].NextDueUnix = nextDue
+		orderPendingItems[i].OrderItems = txItems
+		orderPendingItems[i].IsPrimaryItem = i == 0
+		e.emitOrderAndTx(orderPendingItems[i], emit)
+	}
+	emit(model.CombinedOrdersUsersRow{UserID: u.ID})
+	e.State.PendingOrders = append(e.State.PendingOrders, orderPendingItems...)
 }

@@ -84,3 +84,22 @@ The user base is partitioned into three distinct behavioral cohorts established 
 ### Returns & Holiday Surge
 - Standard Return Rate: Baseline return rate is ~1.1% throughout normal months.
 - Holiday Gift Return Surge: Orders placed during late November and December experience a sharp return spike in January, rising to ~6.5% as gift recipients exchange or return unwanted items.
+
+## 7. Fraudulent Customer Anomalies
+
+### Frequency and Timing
+- At least once per calendar day and no more than three times per day, an anomalous fraudulent purchasing burst occurs.
+- The exact count (one to three) and the specific minute offsets within the 24-hour UTC day are deterministically calculated from the calendar date.
+- The anomaly distribution is uniform across all months and operates independently of standard diurnal retail curves.
+
+### Basket Composition and Catalog Dispersion
+- Unlike normal shoppers who typically buy a single item, fraudulent sessions place really large multi-item orders containing 6 to 12 items.
+- Items are selected exclusively from high-value catalog tiers (expensive outerwear, designer coats, premium suits, and luxury accessories).
+- Within any fraudulent transaction, items are sampled without replacement so the basket contains distinct products rather than repeated duplicates.
+- Across successive fraud events, the generator randomizes product selection across the entire premium catalog pool, ensuring different high-value products are targeted rather than the same products repeatedly.
+
+### Funnel Signature and Lifecycle
+- The fraudster typically registers as a new direct customer, navigates through rapid-succession product views and cart additions, and executes an immediate high-value checkout.
+- Approximately 35% of fraudulent orders are flagged and cancelled within 10 to 60 minutes after checkout, reflecting automated fraud scoring systems.
+- The remaining 65% slip past initial screening and proceed to shipment and delivery, creating realistic chargeback risk profiles and unrecovered inventory analytics.
+- Fraudulent orders are never returned by the perpetrator.

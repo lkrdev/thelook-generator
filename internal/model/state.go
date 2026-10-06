@@ -45,6 +45,8 @@ type PendingOrder struct {
 	ReturnedAt      *string
 	NextStatus      string
 	NextDueUnix     int64
+	OrderItems      []TxItem
+	IsPrimaryItem   bool
 }
 
 type TimeInterval struct {
