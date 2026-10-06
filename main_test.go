@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -467,3 +468,103 @@ func TestCalendarSeasonalityAndHolidayVariability(t *testing.T) {
 		t.Fatalf("expected July 10 not to be peak logistics")
 	}
 }
+
+func TestMonthlyGrowthMultiplier(t *testing.T) {
+	for year := 2016; year <= 2026; year++ {
+		var mults []float64
+		for m := 1; m <= 12; m++ {
+			ts := time.Date(year, time.Month(m), 15, 12, 0, 0, 0, time.UTC)
+			mults = append(mults, sim.MonthlyGrowthMultiplier(ts))
+		}
+
+		hyperCount := 0
+		var moms []float64
+		for m := 1; m < 12; m++ {
+			mom := (mults[m] - mults[m-1]) / mults[m-1]
+			moms = append(moms, mom)
+			if mom < -0.05001 {
+				t.Fatalf("year %d month %d -> %d dropped by %f, exceeds -5%% limit", year, m, m+1, mom)
+			}
+			if math.Abs(mom-0.20) < 0.0001 {
+				hyperCount++
+			}
+		}
+
+		if hyperCount != 1 {
+			t.Fatalf("year %d: expected exactly 1 hyper-growth month (+20%%), got %d", year, hyperCount)
+		}
+
+		sumMom := 0.0
+		for _, mom := range moms {
+			sumMom += mom
+		}
+		avgMom := sumMom / float64(len(moms))
+		if avgMom < 0.04 || avgMom > 0.18 {
+			t.Fatalf("year %d: expected average MoM growth ~10%% (within sample bounds), got %f", year, avgMom)
+		}
+	}
+
+	m2016 := sim.MonthlyGrowthMultiplier(time.Date(2016, time.June, 1, 0, 0, 0, 0, time.UTC))
+	m2020 := sim.MonthlyGrowthMultiplier(time.Date(2020, time.June, 1, 0, 0, 0, 0, time.UTC))
+	m2026 := sim.MonthlyGrowthMultiplier(time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC))
+	if m2016 >= m2020 || m2020 >= m2026 {
+		t.Fatalf("expected growth over time across years: 2016=%f, 2020=%f, 2026=%f", m2016, m2020, m2026)
+	}
+}
+
+func TestPowerUsersTracking(t *testing.T) {
+	st := model.NewState()
+	eng, err := sim.NewEngine(st, defaultSeedJSON, "")
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+
+	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	userEvents := make(map[int64]int)
+	emit := func(row any) {
+		switch r := row.(type) {
+		case model.EventRow:
+			if r.UserID != nil {
+				userEvents[*r.UserID]++
+			}
+		}
+	}
+
+	eng.Bootstrap(baseTime, 50, emit)
+	for m := 0; m < 1500; m++ {
+		eng.Tick(baseTime.Add(time.Duration(m)*time.Minute), 50, emit)
+	}
+
+	if len(st.Users) < 50 {
+		t.Fatalf("expected at least 50 users created, got %d", len(st.Users))
+	}
+	if len(st.PowerUserIDs) == 0 {
+		t.Fatalf("expected power users to be tracked in state, got 0")
+	}
+
+	powerSet := make(map[int64]bool)
+	for _, pid := range st.PowerUserIDs {
+		powerSet[pid] = true
+	}
+
+	totalEvents := 0
+	powerEvents := 0
+	for uid, count := range userEvents {
+		totalEvents += count
+		if powerSet[uid] {
+			powerEvents += count
+		}
+	}
+
+	if totalEvents > 0 {
+		powerUserRatio := float64(len(st.PowerUserIDs)) / float64(len(st.Users))
+		powerEventRatio := float64(powerEvents) / float64(totalEvents)
+		if powerUserRatio < 0.01 || powerUserRatio > 0.15 {
+			t.Fatalf("power user ratio %f outside expected range ~5%%", powerUserRatio)
+		}
+		if len(st.PowerUserIDs) > 0 && powerEventRatio <= powerUserRatio {
+			t.Fatalf("expected power event ratio (%f) > power user ratio (%f)", powerEventRatio, powerUserRatio)
+		}
+	}
+}
+

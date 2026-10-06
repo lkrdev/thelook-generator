@@ -65,7 +65,8 @@ type State struct {
 	NextKeywordID   int64
 	NextAdEventID   int64
 
-	Users []UserRow
+	Users        []UserRow
+	PowerUserIDs []int64
 
 	Products        []ProductMeta
 	OnboardedBrands []string

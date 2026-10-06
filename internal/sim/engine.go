@@ -68,9 +68,8 @@ func (e *Engine) Tick(ts time.Time, initialProducts int, emit func(any)) {
 	}
 
 	hrWeight := float64(e.Seed.HourlyWeights[ts.Hour()]) / 10240.0
-	yearsSince2016 := math.Max(0.1, ts.Sub(time.Date(2016, 10, 1, 0, 0, 0, 0, time.UTC)).Hours()/(24*365.25))
 	trafficMult, _, _ := CalendarSeason(ts)
-	growthFactor := math.Min(1.25, 0.15+0.11*yearsSince2016) * hrWeight * trafficMult
+	growthFactor := MonthlyGrowthMultiplier(ts) * hrWeight * trafficMult
 
 	if e.rng.Float64() < (2.0 / (7.0 * 1440.0)) {
 		e.OnboardNewBrand(ts, emit)

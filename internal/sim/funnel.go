@@ -120,6 +120,9 @@ func (e *Engine) signupUser(ts time.Time, loc model.LocationProfile, emit func(a
 		TrafficSource: userTrafficSrcs[e.rng.IntN(len(userTrafficSrcs))],
 	}
 	e.State.Users = append(e.State.Users, u)
+	if e.rng.Float64() < 0.05 {
+		e.State.PowerUserIDs = append(e.State.PowerUserIDs, id)
+	}
 	emit(u)
 	return u
 }
@@ -170,7 +173,20 @@ func (e *Engine) runBrowseSession(ts time.Time, emit func(any)) {
 		e.emitWebEvent(evTime, sessionID, seq, &uid, adEventID, u, ob[0], ob[1], tsrc,
 			fmt.Sprintf("/product/%d", p.ID), "Product", emit)
 	} else {
-		u = e.State.Users[e.rng.IntN(len(e.State.Users))]
+		if len(e.State.PowerUserIDs) == 0 && len(e.State.Users) >= 20 {
+			for _, existU := range e.State.Users {
+				if existU.ID%20 == 0 {
+					e.State.PowerUserIDs = append(e.State.PowerUserIDs, existU.ID)
+				}
+			}
+		}
+
+		if len(e.State.PowerUserIDs) > 0 && e.rng.Float64() < 0.16 {
+			powerID := e.State.PowerUserIDs[e.rng.IntN(len(e.State.PowerUserIDs))]
+			u = e.State.Users[powerID-1]
+		} else {
+			u = e.State.Users[e.rng.IntN(len(e.State.Users))]
+		}
 		uid := u.ID
 		if e.rng.Float64() < 0.5 {
 			e.emitWebEvent(evTime, sessionID, seq, &uid, adEventID, u, ob[0], ob[1], tsrc,

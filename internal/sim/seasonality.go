@@ -1,6 +1,10 @@
 package sim
 
-import "time"
+import (
+	"math"
+	"math/rand/v2"
+	"time"
+)
 
 func DowMultiplier(wd time.Weekday) float64 {
 	switch wd {
@@ -122,4 +126,30 @@ func CategorySeasonWeight(cat string, m time.Month) float64 {
 		}
 	}
 	return 1.0
+}
+
+// MonthlyGrowthMultiplier returns a deterministic growth multiplier for the given timestamp.
+// Within each year:
+// - One random month experiences hyper-growth (+20% MoM).
+// - Other months fluctuate with an average MoM of ~10%, never dropping by more than 5%.
+// Across years, an annual compounding baseline provides steady organic expansion.
+func MonthlyGrowthMultiplier(t time.Time) float64 {
+	year, month := t.Year(), int(t.Month())
+	rng := rand.New(rand.NewPCG(uint64(year), 0x5448454c4f4f4b))
+	hyperMonth := 2 + rng.IntN(9) // Pick random month between Feb (2) and Oct (10)
+
+	mult := 1.0
+	for m := 2; m <= month; m++ {
+		if m == hyperMonth {
+			mult *= 1.20
+		} else {
+			// Uniform in [-0.05, 0.23], mean = +0.09, min = -0.05
+			mom := -0.05 + rng.Float64()*0.28
+			mult *= (1.0 + mom)
+		}
+	}
+
+	yIdx := max(0, year-2016)
+	base := 0.20 * math.Pow(1.30, math.Min(float64(yIdx), 10.0))
+	return math.Min(6.0, base*mult)
 }
