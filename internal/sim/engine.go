@@ -68,9 +68,8 @@ func (e *Engine) Tick(ts time.Time, initialProducts int, emit func(any)) {
 	}
 
 	hrWeight := float64(e.Seed.HourlyWeights[ts.Hour()]) / 10240.0
-	yearsSince2016 := math.Max(0.1, ts.Sub(time.Date(2016, 10, 1, 0, 0, 0, 0, time.UTC)).Hours()/(24*365.25))
 	trafficMult, _, _ := CalendarSeason(ts)
-	growthFactor := math.Min(1.25, 0.15+0.11*yearsSince2016) * hrWeight * trafficMult
+	growthFactor := MonthlyGrowthMultiplier(ts) * hrWeight * trafficMult
 
 	if e.rng.Float64() < (2.0 / (7.0 * 1440.0)) {
 		e.OnboardNewBrand(ts, emit)
@@ -118,10 +117,12 @@ func (e *Engine) Tick(ts time.Time, initialProducts int, emit func(any)) {
 			po.Status = po.NextStatus
 			switch po.Status {
 			case "Cancelled":
-				u := e.State.Users[po.UserID-1]
-				ob := osBrowsers[e.rng.IntN(len(osBrowsers))]
-				uid := po.UserID
-				e.emitWebEvent(transTime, e.newUUID(), 1, &uid, nil, u, ob[0], ob[1], u.TrafficSource, "/cancel", "Cancel", emit)
+				if len(po.OrderItems) == 0 || po.IsPrimaryItem {
+					u := e.lookupUser(po.UserID)
+					ob := osBrowsers[e.rng.IntN(len(osBrowsers))]
+					uid := po.UserID
+					e.emitWebEvent(transTime, e.newUUID(), 1, &uid, nil, u, ob[0], ob[1], u.TrafficSource, "/cancel", "Cancel", emit)
+				}
 				e.emitOrderAndTx(po, emit)
 			case "Shipped":
 				shipDate := model.FmtDate(transTime)
@@ -144,6 +145,9 @@ func (e *Engine) Tick(ts time.Time, initialProducts int, emit func(any)) {
 				isHolidayOrder := len(po.CreatedAt) >= 10 && (po.CreatedAt[5:7] == "12" || (po.CreatedAt[5:7] == "11" && po.CreatedAt[8:10] >= "20"))
 				if isHolidayOrder {
 					retRate = 0.065
+				}
+				if len(po.OrderItems) > 0 {
+					retRate = 0.0
 				}
 				if e.rng.Float64() < retRate {
 					po.NextStatus = "Returned"
@@ -170,11 +174,15 @@ func (e *Engine) Tick(ts time.Time, initialProducts int, emit func(any)) {
 		e.runBrowseSession(ts, emit)
 	}
 
+	if IsFraudAnomalyMinute(ts) && len(e.State.Products) > 0 {
+		e.EmitFraudAnomaly(ts, emit)
+	}
+
 	remainingViews := e.State.ViewedItems[:0]
 	for _, vi := range e.State.ViewedItems {
 		if vi.DueUnix <= nowUnix {
 			cartTime := time.Unix(max(ts.Unix(), vi.DueUnix), 0).UTC()
-			u := e.State.Users[vi.UserID-1]
+			u := e.lookupUser(vi.UserID)
 			uid := vi.UserID
 			vi.SeqNum++
 			e.emitWebEvent(cartTime, vi.SessionID, vi.SeqNum, &uid, vi.AdEventID, u, vi.OS, vi.Browser, vi.TrafficSource, "/cart", "Cart", emit)

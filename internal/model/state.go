@@ -45,6 +45,8 @@ type PendingOrder struct {
 	ReturnedAt      *string
 	NextStatus      string
 	NextDueUnix     int64
+	OrderItems      []TxItem
+	IsPrimaryItem   bool
 }
 
 type TimeInterval struct {
@@ -65,7 +67,9 @@ type State struct {
 	NextKeywordID   int64
 	NextAdEventID   int64
 
-	Users []UserRow
+	Users           []UserRow
+	PowerUserIDs    []int64
+	HeavyBrowserIDs []int64
 
 	Products        []ProductMeta
 	OnboardedBrands []string

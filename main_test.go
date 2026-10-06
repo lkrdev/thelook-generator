@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -369,24 +370,107 @@ func TestDestroyAndDropDDL(t *testing.T) {
 	}
 	_ = os.WriteFile(tmpProf, []byte("{}"), 0644)
 
-	// 1. Wrong interactive confirmation with --delete-tables must abort before removing state or running bq
-	err := cmdDestroy([]string{"--delete-tables", "--project", "looker-private-demo", "--dataset", "ecomm", "--state", tmpState, "--profile", tmpProf}, strings.NewReader("wrong.dataset\n"))
+	// 1. Wrong interactive confirmation must abort before removing state or running cloud commands
+	err := cmdDestroy([]string{"--project", "looker-private-demo", "--dataset", "ecomm", "--state", tmpState, "--profile", tmpProf}, strings.NewReader("wrong.dataset\n"))
 	if err == nil || !strings.Contains(err.Error(), "aborted") {
 		t.Fatalf("expected abort error on mismatched confirmation, got: %v", err)
 	}
 	if _, err := os.Stat(tmpState); err != nil {
-		t.Fatalf("expected state file to remain untouched when --delete-tables aborts")
+		t.Fatalf("expected state file to remain untouched when destroy aborts")
 	}
 
-	// 2. Without --delete-tables, destroy removes local state, command log, and profile files cleanly
+	// 2. Default destroy tears down everything (Looker, PSC, VM, Database, Secrets, Service Account, Local State)
+	var executed []string
+	mockRun := func(name string, args ...string) (string, error) {
+		cmdStr := name + " " + strings.Join(args, " ")
+		executed = append(executed, cmdStr)
+		if strings.Contains(cmdStr, "format=value(projectNumber)") {
+			return "123456789", nil
+		}
+		return "", nil
+	}
+
 	server.RecordCommandRun(tmpState, "status", nil)
-	if err := cmdDestroy([]string{"--state", tmpState, "--profile", tmpProf}, strings.NewReader("")); err != nil {
-		t.Fatalf("cmdDestroy failed: %v", err)
+	err = runDestroyArgs([]string{
+		"--project", "looker-private-demo",
+		"--dataset", "ecomm",
+		"--looker-base-url", "https://looker.example.com",
+		"--looker-instance", "my-looker",
+		"--state", tmpState,
+		"--profile", tmpProf,
+	}, strings.NewReader("looker-private-demo.ecomm\n"), mockRun)
+	if err != nil {
+		t.Fatalf("default full destroy failed: %v", err)
+	}
+
+	joined := strings.Join(executed, "\n")
+	for _, want := range []string{
+		"conn_name=thelook_bq",
+		"conn_name=thelook_alloydb",
+		"looker instances update my-looker",
+		"service-attachments delete alloydb-svc-attachment",
+		"forwarding-rules delete alloydb-psc-fr",
+		"target-tcp-proxies delete alloydb-lb-tcp-proxy",
+		"backend-services delete alloydb-backend-svc",
+		"network-endpoint-groups delete alloydb-internet-neg",
+		"networks subnets delete alloydb-psc-nat-subnet",
+		"compute instances delete thelook-bq-gen",
+		"compute instances delete thelook-alloydb-gen",
+		"firewall-rules delete allow-thelook-status",
+		"bq rm -r -f -d looker-private-demo:ecomm",
+		"alloydb instances delete thelook-primary",
+		"alloydb clusters delete thelook-cluster",
+		"addresses delete alloydb-range",
+		"secrets delete thelook-dashboard-secret",
+		"secrets delete thelook-alloydb-password",
+		"remove-iam-policy-binding looker-private-demo --member=serviceAccount:123456789-compute@developer.gserviceaccount.com",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected default destroy to run %q, got:\n%s", want, joined)
+		}
 	}
 	for _, p := range []string{tmpState, server.CommandLogPath(tmpState), tmpProf} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
-			t.Fatalf("expected %s to be removed by destroy", p)
+			t.Fatalf("expected %s to be removed by default destroy", p)
 		}
+	}
+
+	// 3. Verify --no-X flags selectively skip components
+	_ = model.NewState().Save(tmpState)
+	executed = nil
+	err = runDestroyArgs([]string{
+		"--project", "looker-private-demo",
+		"--dataset", "ecomm",
+		"--looker-base-url", "https://looker.example.com",
+		"--yes",
+		"--no-looker",
+		"--no-psc",
+		"--no-vm",
+		"--no-secrets",
+		"--no-service-account",
+		"--no-local-state",
+		"--state", tmpState,
+	}, strings.NewReader(""), mockRun)
+	if err != nil {
+		t.Fatalf("selective destroy failed: %v", err)
+	}
+	joinedSelective := strings.Join(executed, "\n")
+	for _, forbidden := range []string{
+		"delete_connection",
+		"service-attachments delete",
+		"compute instances delete",
+		"secrets delete",
+		"remove-iam-policy-binding",
+	} {
+		if strings.Contains(joinedSelective, forbidden) {
+			t.Fatalf("expected --no-* flags to skip %q, got:\n%s", forbidden, joinedSelective)
+		}
+	}
+	if !strings.Contains(joinedSelective, "bq rm -r -f -d looker-private-demo:ecomm") {
+		t.Fatalf("expected database teardown to still execute when --no-database was not passed")
+	}
+	if _, err := os.Stat(tmpState); err != nil {
+		t.Fatalf("expected --no-local-state to preserve %s", tmpState)
 	}
 }
 
@@ -467,3 +551,292 @@ func TestCalendarSeasonalityAndHolidayVariability(t *testing.T) {
 		t.Fatalf("expected July 10 not to be peak logistics")
 	}
 }
+
+func TestMonthlyGrowthMultiplier(t *testing.T) {
+	for year := 2016; year <= 2026; year++ {
+		var mults []float64
+		for m := 1; m <= 12; m++ {
+			ts := time.Date(year, time.Month(m), 15, 12, 0, 0, 0, time.UTC)
+			mults = append(mults, sim.MonthlyGrowthMultiplier(ts))
+		}
+
+		hyperCount := 0
+		var moms []float64
+		for m := 1; m < 12; m++ {
+			mom := (mults[m] - mults[m-1]) / mults[m-1]
+			moms = append(moms, mom)
+			if mom < -0.05001 {
+				t.Fatalf("year %d month %d -> %d dropped by %f, exceeds -5%% limit", year, m, m+1, mom)
+			}
+			if math.Abs(mom-0.20) < 0.0001 {
+				hyperCount++
+			}
+		}
+
+		if hyperCount != 1 {
+			t.Fatalf("year %d: expected exactly 1 hyper-growth month (+20%%), got %d", year, hyperCount)
+		}
+
+		sumMom := 0.0
+		for _, mom := range moms {
+			sumMom += mom
+		}
+		avgMom := sumMom / float64(len(moms))
+		if avgMom < 0.04 || avgMom > 0.18 {
+			t.Fatalf("year %d: expected average MoM growth ~10%% (within sample bounds), got %f", year, avgMom)
+		}
+	}
+
+	m2016 := sim.MonthlyGrowthMultiplier(time.Date(2016, time.June, 1, 0, 0, 0, 0, time.UTC))
+	m2020 := sim.MonthlyGrowthMultiplier(time.Date(2020, time.June, 1, 0, 0, 0, 0, time.UTC))
+	m2026 := sim.MonthlyGrowthMultiplier(time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC))
+	if m2016 >= m2020 || m2020 >= m2026 {
+		t.Fatalf("expected growth over time across years: 2016=%f, 2020=%f, 2026=%f", m2016, m2020, m2026)
+	}
+}
+
+func TestPowerUsersTracking(t *testing.T) {
+	st := model.NewState()
+	eng, err := sim.NewEngine(st, defaultSeedJSON, "")
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+
+	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	userEvents := make(map[int64]int)
+	maxSeq := int64(0)
+	emit := func(row any) {
+		switch r := row.(type) {
+		case model.EventRow:
+			if r.UserID != nil {
+				userEvents[*r.UserID]++
+			}
+			if r.SequenceNumber > maxSeq {
+				maxSeq = r.SequenceNumber
+			}
+		}
+	}
+
+	eng.Bootstrap(baseTime, 50, emit)
+	for m := 0; m < 2500; m++ {
+		eng.Tick(baseTime.Add(time.Duration(m)*time.Minute), 50, emit)
+	}
+
+	if len(st.Users) < 50 {
+		t.Fatalf("expected at least 50 users created, got %d", len(st.Users))
+	}
+	if len(st.PowerUserIDs) == 0 {
+		t.Fatalf("expected power users to be tracked in state, got 0")
+	}
+	if maxSeq <= 5 {
+		t.Fatalf("expected extended sequence numbers > 5 for heavy browser sessions, got %d", maxSeq)
+	}
+
+	powerSet := make(map[int64]bool)
+	for _, pid := range st.PowerUserIDs {
+		powerSet[pid] = true
+	}
+
+	totalEvents := 0
+	powerEvents := 0
+	for uid, count := range userEvents {
+		totalEvents += count
+		if powerSet[uid] {
+			powerEvents += count
+		}
+	}
+
+	if totalEvents > 0 {
+		powerUserRatio := float64(len(st.PowerUserIDs)) / float64(len(st.Users))
+		powerEventRatio := float64(powerEvents) / float64(totalEvents)
+		if powerUserRatio < 0.01 || powerUserRatio > 0.15 {
+			t.Fatalf("power user ratio %f outside expected range ~5%%", powerUserRatio)
+		}
+		if len(st.PowerUserIDs) > 0 && powerEventRatio <= powerUserRatio {
+			t.Fatalf("expected power event ratio (%f) > power user ratio (%f)", powerEventRatio, powerUserRatio)
+		}
+	}
+}
+
+func TestFraudAnomalyScheduleAndExecution(t *testing.T) {
+	// 1. Verify schedule: 1 to 3 distinct minutes per day across a full year
+	for day := 1; day <= 365; day++ {
+		date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, day-1)
+		mins := sim.FraudAnomalyMinutes(date)
+		if len(mins) < 1 || len(mins) > 3 {
+			t.Fatalf("day %s: expected 1-3 fraud anomaly minutes, got %d", date.Format("2006-01-02"), len(mins))
+		}
+		seen := make(map[int]bool)
+		for _, m := range mins {
+			if m < 0 || m >= 1440 {
+				t.Fatalf("day %s: minute offset %d out of bounds [0, 1439]", date.Format("2006-01-02"), m)
+			}
+			if seen[m] {
+				t.Fatalf("day %s: duplicate minute %d in fraud schedule", date.Format("2006-01-02"), m)
+			}
+			seen[m] = true
+			minTime := date.Add(time.Duration(m) * time.Minute)
+			if !sim.IsFraudAnomalyMinute(minTime) {
+				t.Fatalf("expected IsFraudAnomalyMinute(%s) to be true", minTime)
+			}
+		}
+		// Pick a non-anomaly minute to confirm it returns false
+		for candidate := 0; candidate < 1440; candidate++ {
+			if !seen[candidate] {
+				nonFraudTime := date.Add(time.Duration(candidate) * time.Minute)
+				if sim.IsFraudAnomalyMinute(nonFraudTime) {
+					t.Fatalf("expected IsFraudAnomalyMinute(%s) to be false", nonFraudTime)
+				}
+				break
+			}
+		}
+	}
+
+	// 2. Verify execution: large multi-item purchase with high-value distinct items
+	st := model.NewState()
+	eng, err := sim.NewEngine(st, defaultSeedJSON, "")
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+
+	var emittedRows []any
+	emit := func(row any) {
+		emittedRows = append(emittedRows, row)
+	}
+
+	baseTime := time.Date(2026, 6, 15, 14, 30, 0, 0, time.UTC)
+	eng.Bootstrap(baseTime, 100, emit)
+	emittedRows = emittedRows[:0]
+
+	eng.EmitFraudAnomaly(baseTime, emit)
+
+	var users []model.UserRow
+	var events []model.EventRow
+	var orderItems []model.OrderItemRow
+	var txDetails []model.TransactionDetailRow
+
+	for _, row := range emittedRows {
+		switch r := row.(type) {
+		case model.UserRow:
+			users = append(users, r)
+		case model.EventRow:
+			events = append(events, r)
+		case model.OrderItemRow:
+			orderItems = append(orderItems, r)
+		case model.TransactionDetailRow:
+			txDetails = append(txDetails, r)
+		}
+	}
+
+	if len(users) != 1 {
+		t.Fatalf("expected exactly 1 user registered for fraud anomaly, got %d", len(users))
+	}
+	fraudUser := users[0]
+
+	// Check web event funnel progression
+	hasRegister := false
+	productViews := 0
+	cartEvents := 0
+	hasPurchase := false
+	for _, ev := range events {
+		if ev.UserID == nil || *ev.UserID != fraudUser.ID {
+			t.Fatalf("event %d has unexpected user ID", ev.ID)
+		}
+		switch ev.EventType {
+		case "Register":
+			hasRegister = true
+		case "Product":
+			productViews++
+		case "Cart":
+			cartEvents++
+		case "Purchase":
+			hasPurchase = true
+		}
+	}
+
+	if !hasRegister || !hasPurchase {
+		t.Fatalf("expected Register and Purchase events in fraud session")
+	}
+	if productViews < 6 || cartEvents < 6 {
+		t.Fatalf("expected at least 6 product views and carts, got %d views, %d carts", productViews, cartEvents)
+	}
+
+	// Check order items: large purchase (6 to 12 items), single order ID, distinct products
+	if len(orderItems) < 6 || len(orderItems) > 12 {
+		t.Fatalf("expected 6-12 order items in fraudulent purchase, got %d", len(orderItems))
+	}
+
+	orderID := orderItems[0].OrderID
+	orderProductIDs := make(map[int64]bool)
+	totalSalePrice := 0.0
+
+	for _, oi := range orderItems {
+		if oi.OrderID != orderID {
+			t.Fatalf("expected all order items to share order_id %d, got %d", orderID, oi.OrderID)
+		}
+		if oi.UserID != fraudUser.ID {
+			t.Fatalf("expected order item to belong to fraud user %d, got %d", fraudUser.ID, oi.UserID)
+		}
+		totalSalePrice += oi.SalePrice
+		if oi.SalePrice < 50.0 {
+			t.Fatalf("expected high-value item with sale_price >= 50, got %f", oi.SalePrice)
+		}
+	}
+
+	// Verify TransactionDetailRow has all items
+	if len(txDetails) != 1 {
+		t.Fatalf("expected 1 TransactionDetailRow emitted for the order, got %d", len(txDetails))
+	}
+	td := txDetails[0]
+	if td.OrderID != orderID {
+		t.Fatalf("expected transaction_detail order_id %d, got %d", orderID, td.OrderID)
+	}
+	if len(td.Items) != len(orderItems) {
+		t.Fatalf("expected transaction_detail.Items length %d, got %d", len(orderItems), len(td.Items))
+	}
+
+	// 3. Verify successive fraud orders do not repeat identical baskets
+	emittedRows = emittedRows[:0]
+	eng.EmitFraudAnomaly(baseTime.Add(time.Hour), emit)
+
+	var secondOrderItems []model.OrderItemRow
+	for _, row := range emittedRows {
+		if oi, ok := row.(model.OrderItemRow); ok {
+			secondOrderItems = append(secondOrderItems, oi)
+		}
+	}
+	if len(secondOrderItems) < 6 {
+		t.Fatalf("expected at least 6 items in second fraud order, got %d", len(secondOrderItems))
+	}
+	for _, oi := range orderItems {
+		orderProductIDs[oi.InventoryItemID] = true
+	}
+	var overlapCount int
+	for _, oi := range secondOrderItems {
+		if orderProductIDs[oi.InventoryItemID] {
+			overlapCount++
+		}
+	}
+	if overlapCount == len(secondOrderItems) {
+		t.Fatalf("successive fraud orders should not have identical items; got complete overlap")
+	}
+
+	// 4. Verify 24-hour day in simulation triggers exactly 1 to 3 fraud bursts
+	stDay := model.NewState()
+	engDay, _ := sim.NewEngine(stDay, defaultSeedJSON, "")
+	engDay.Bootstrap(baseTime, 100, func(any) {})
+	var fraudTxCount int
+	dayEmit := func(row any) {
+		if td, ok := row.(model.TransactionDetailRow); ok && len(td.Items) >= 6 && td.Status == "Processing" {
+			fraudTxCount++
+		}
+	}
+	dayStart := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	for m := 0; m < 1440; m++ {
+		engDay.Tick(dayStart.Add(time.Duration(m)*time.Minute), 100, dayEmit)
+	}
+	if fraudTxCount < 1 || fraudTxCount > 3 {
+		t.Fatalf("expected 1-3 fraudulent multi-item transactions in 24 hours, got %d", fraudTxCount)
+	}
+}
+

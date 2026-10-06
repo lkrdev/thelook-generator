@@ -5,7 +5,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/alecthomas/kong"
 
 	"thelook-generator/internal/bq"
 	"thelook-generator/internal/model"
@@ -61,13 +62,8 @@ func (e *JSONEmitter) Emit(row any) {
 	_ = e.enc.Encode(row)
 }
 
-func (e *JSONEmitter) Flush() error {
-	return e.w.Flush()
-}
-
-func (e *JSONEmitter) Close() error {
-	return e.Flush()
-}
+func (e *JSONEmitter) Flush() error { return e.w.Flush() }
+func (e *JSONEmitter) Close() error { return e.Flush() }
 
 func parseTimeArg(s string) (time.Time, error) {
 	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04", "2006-01-02"} {
@@ -87,17 +83,10 @@ func isPostgres() bool {
 }
 
 func postgresSchema(override string) string {
-	if override != "" {
-		return override
-	}
-	if s := os.Getenv("ALLOYDB_SCHEMA"); s != "" {
-		return s
-	}
-	if s := os.Getenv("PGSCHEMA"); s != "" {
-		return s
-	}
-	if s := os.Getenv("GCP_DATASET"); s != "" {
-		return s
+	for _, s := range []string{override, os.Getenv("ALLOYDB_SCHEMA"), os.Getenv("PGSCHEMA"), os.Getenv("GCP_DATASET")} {
+		if s != "" {
+			return s
+		}
 	}
 	return "public"
 }
@@ -119,102 +108,55 @@ func defaultDataset() string {
 	return os.Getenv("GCP_PROJECT") + "." + os.Getenv("GCP_DATASET")
 }
 
-func usage() {
-	fmt.Fprintf(os.Stderr, `thelook - Modernized Data Generator (BigQuery + PostgreSQL / AlloyDB CDC)
-
-Target Selection:
-  Default: BigQuery (requires GCP_PROJECT, GCP_DATASET, and SECRET)
-  PostgreSQL / AlloyDB: set TARGET_DB=postgres or DATABASE_URL (requires SECRET, uses DATABASE_URL / PGHOST)
-
-Required Environment Variables:
-  SECRET       Authentication key for the HTTP status server (?key=<SECRET>)
-  GCP_PROJECT  GCP Project ID (BigQuery mode)
-  GCP_DATASET  BigQuery Dataset/Schema (BigQuery mode)
-  DATABASE_URL PostgreSQL / AlloyDB connection string (PostgreSQL mode, or standard PG* env vars)
-
-Usage:
-  thelook deploy   [--project <gcp-project>] [--dataset <schema>] [--from-fy 2016] [--to-fy 2036] [--state state.gob] [--http :8080]
-  thelook destroy  [--delete-tables] [--project <gcp-project>] [--dataset <schema>] [--state state.gob] [--profile profile.json]
-  thelook tables   [--project <gcp-project>] [--dataset <schema>] [--apply] [--http :8080]
-  thelook backfill [--from 2016-10-02T00:00:00Z --to 2026-10-02T00:00:00Z | --days 3650] [--stdout] [--rate 0] [--state state.gob] [--http :8080]
-  thelook calendar [--from-fy 2016] [--to-fy 2036] [--stdout] [--rate 0] [--http :8080]
-  thelook run      [--state state.gob] [--profile profile.json] [--stdout] [--http :8080] [--analyze-interval 24h]
-  thelook gaps     [--state state.gob] [--fill] [--stdout] [--rate 0] [--check-bq] [--dataset <project.schema>] [--http :8080]
-  thelook status   [--state state.gob] [--http :8080]
-  thelook analyze  [--dataset <project.schema>] [--out profile.json] [--http :8080]
-`)
+type CLI struct {
+	Deploy   DeployCmd   `cmd:"" help:"Deploy tables and/or cloud infrastructure (BigQuery or AlloyDB)."`
+	Destroy  DestroyCmd  `cmd:"" help:"Tear down cloud infrastructure, Looker connections, service account roles, and state."`
+	Run      RunCmd      `cmd:"" help:"Run live minute-by-minute event and CDC streaming daemon."`
+	Backfill BackfillCmd `cmd:"" help:"Backfill historical simulation data across a date range or N days."`
+	Gaps     GapsCmd     `cmd:"" help:"Inspect and optionally fill time gaps in recorded simulation intervals."`
+	Analyze  AnalyzeCmd  `cmd:"" help:"Analyze an existing BigQuery dataset to generate a seed profile."`
+	Calendar CalendarCmd `cmd:"" help:"Generate NRF 4-5-4 retail calendar rows."`
+	Tables   TablesCmd   `cmd:"" help:"Print or apply BigQuery / PostgreSQL DDL."`
+	Status   StatusCmd   `cmd:"" help:"Serve the authenticated HTTP status UI."`
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		usage()
-		os.Exit(1)
-	}
+type StatusCmd struct {
+	State string `default:"state.gob" help:"Path to on-disk state."`
+	HTTP  string `default:":8080" help:"HTTP listen address for status server."`
+}
+
+func (c *StatusCmd) Run() error {
 	if err := requireEnv(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-	cmd := os.Args[1]
-	args := os.Args[2:]
-
-	var err error
-	switch cmd {
-	case "deploy":
-		err = cmdDeploy(args)
-	case "destroy":
-		err = cmdDestroy(args, os.Stdin)
-	case "run":
-		err = cmdRun(args)
-	case "backfill":
-		err = cmdBackfill(args)
-	case "gaps":
-		err = cmdGaps(args)
-	case "analyze":
-		err = cmdAnalyze(args)
-	case "calendar":
-		err = cmdCalendar(args)
-	case "tables":
-		err = cmdTables(args)
-	case "status":
-		err = cmdStatus(args)
-	default:
-		usage()
-		os.Exit(1)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	server.RecordCommandRun(c.State, "status", os.Args[2:])
+	fmt.Fprintf(os.Stderr, "Serving status on http://%s\n", c.HTTP)
+	return http.ListenAndServe(c.HTTP, server.NewStatusMux(c.State))
 }
 
-func cmdStatus(args []string) error {
-	fs := flag.NewFlagSet("status", flag.ExitOnError)
-	statePath := fs.String("state", "state.gob", "Path to on-disk state")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
-
-	server.RecordCommandRun(*statePath, "status", args)
-	fmt.Fprintf(os.Stderr, "Serving status on http://%s\n", *httpAddr)
-	return http.ListenAndServe(*httpAddr, server.NewStatusMux(*statePath))
+type CalendarCmd struct {
+	FromFY int    `name:"from-fy" default:"2016" help:"Start fiscal year (inclusive)."`
+	ToFY   int    `name:"to-fy" default:"2036" help:"End fiscal year (inclusive)."`
+	Stdout bool   `help:"Emit JSON lines to stdout instead of loading into database."`
+	Rate   int    `default:"0" help:"Max JSON lines/sec when --stdout is set (0 = unlimited)."`
+	State  string `default:"state.gob" help:"Path to on-disk state (for command log)."`
+	HTTP   string `default:":8080" help:"HTTP listen address for status server."`
 }
 
-func cmdCalendar(args []string) error {
-	fs := flag.NewFlagSet("calendar", flag.ExitOnError)
-	fromFY := fs.Int("from-fy", 2016, "Start fiscal year (inclusive)")
-	toFY := fs.Int("to-fy", 2036, "End fiscal year (inclusive)")
-	stdout := fs.Bool("stdout", false, "Emit JSON lines to stdout instead of loading into BigQuery")
-	rate := fs.Int("rate", 0, "Max JSON lines/sec when --stdout is set (0 = unlimited)")
-	statePath := fs.String("state", "state.gob", "Path to on-disk state (for command log)")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
-	if *fromFY > *toFY {
-		return fmt.Errorf("--from-fy (%d) must be <= --to-fy (%d)", *fromFY, *toFY)
+func (c *CalendarCmd) Run() error {
+	if !c.Stdout {
+		if err := requireEnv(); err != nil {
+			return err
+		}
 	}
-	server.RecordCommandRun(*statePath, "calendar", args)
-	server.StartBackgroundServer(*httpAddr, *statePath)
-	if *stdout {
-		emitter := NewJSONEmitter(os.Stdout, *rate)
-		sim.EmitRetailCalendar454(*fromFY, *toFY, emitter.Emit)
+	if c.FromFY > c.ToFY {
+		return fmt.Errorf("--from-fy (%d) must be <= --to-fy (%d)", c.FromFY, c.ToFY)
+	}
+	server.RecordCommandRun(c.State, "calendar", os.Args[2:])
+	server.StartBackgroundServer(c.HTTP, c.State)
+	if c.Stdout {
+		emitter := NewJSONEmitter(os.Stdout, c.Rate)
+		sim.EmitRetailCalendar454(c.FromFY, c.ToFY, emitter.Emit)
 		return emitter.Flush()
 	}
 	if isPostgres() {
@@ -223,36 +165,44 @@ func cmdCalendar(args []string) error {
 			return err
 		}
 		defer sink.Close()
-		sim.EmitRetailCalendar454(*fromFY, *toFY, sink.Emit)
+		sim.EmitRetailCalendar454(c.FromFY, c.ToFY, sink.Emit)
 		return sink.Flush()
 	}
 	sink, err := bq.NewBatchLoadSink(os.Getenv("GCP_PROJECT"), os.Getenv("GCP_DATASET"))
 	if err != nil {
 		return err
 	}
-	sim.EmitRetailCalendar454(*fromFY, *toFY, sink.Emit)
+	sim.EmitRetailCalendar454(c.FromFY, c.ToFY, sink.Emit)
 	return sink.FlushAndLoad()
 }
 
-func cmdRun(args []string) error {
-	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	statePath := fs.String("state", "state.gob", "Path to on-disk FK & interval lookup state")
-	profilePath := fs.String("profile", "profile.json", "Path to analyzed statistical profile JSON")
-	analyzeInterval := fs.Duration("analyze-interval", 24*time.Hour, "Interval to re-analyze BigQuery dataset patterns (0 to disable)")
-	dataset := fs.String("dataset", defaultDataset(), "BigQuery project.schema to analyze (env: GCP_PROJECT, GCP_DATASET)")
-	initialProducts := fs.Int("initial-products", 14560, "Initial product catalog size on bootstrap")
-	stdout := fs.Bool("stdout", false, "Emit JSON lines to stdout instead of streaming to BigQuery")
-	rate := fs.Int("rate", 0, "Max JSON lines/sec when --stdout is set (0 = unlimited)")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
+type RunCmd struct {
+	State           string        `default:"state.gob" help:"Path to on-disk FK & interval lookup state."`
+	Profile         string        `default:"profile.json" help:"Path to analyzed statistical profile JSON."`
+	AnalyzeInterval time.Duration `name:"analyze-interval" default:"24h" help:"Interval to re-analyze BigQuery dataset patterns (0 to disable)."`
+	Dataset         string        `help:"BigQuery project.schema to analyze."`
+	InitialProducts int           `name:"initial-products" default:"14560" help:"Initial product catalog size on bootstrap."`
+	Stdout          bool          `help:"Emit JSON lines to stdout instead of streaming to database."`
+	Rate            int           `default:"0" help:"Max JSON lines/sec when --stdout is set (0 = unlimited)."`
+	HTTP            string        `default:":8080" help:"HTTP listen address for status server."`
+}
 
-	server.RecordCommandRun(*statePath, "run", args)
-	server.StartBackgroundServer(*httpAddr, *statePath)
-	st, err := model.LoadState(*statePath)
+func (c *RunCmd) Run() error {
+	if !c.Stdout {
+		if err := requireEnv(); err != nil {
+			return err
+		}
+	}
+	if c.Dataset == "" {
+		c.Dataset = defaultDataset()
+	}
+	server.RecordCommandRun(c.State, "run", os.Args[2:])
+	server.StartBackgroundServer(c.HTTP, c.State)
+	st, err := model.LoadState(c.State)
 	if err != nil {
 		return err
 	}
-	eng, err := sim.NewEngine(st, defaultSeedJSON, *profilePath)
+	eng, err := sim.NewEngine(st, defaultSeedJSON, c.Profile)
 	if err != nil {
 		return err
 	}
@@ -262,8 +212,8 @@ func cmdRun(args []string) error {
 
 	var emitFn func(any)
 	var flushFn func() error
-	if *stdout {
-		em := NewJSONEmitter(os.Stdout, *rate)
+	if c.Stdout {
+		em := NewJSONEmitter(os.Stdout, c.Rate)
 		emitFn = em.Emit
 		flushFn = em.Flush
 	} else if isPostgres() {
@@ -289,18 +239,18 @@ func cmdRun(args []string) error {
 
 	var analyzeTicker *time.Ticker
 	var analyzeCh <-chan time.Time
-	if *analyzeInterval > 0 {
-		analyzeTicker = time.NewTicker(*analyzeInterval)
+	if c.AnalyzeInterval > 0 {
+		analyzeTicker = time.NewTicker(c.AnalyzeInterval)
 		defer analyzeTicker.Stop()
 		analyzeCh = analyzeTicker.C
 	}
 
 	runOnce := func(t time.Time) {
-		eng.Tick(t.UTC().Truncate(time.Minute), *initialProducts, emitFn)
+		eng.Tick(t.UTC().Truncate(time.Minute), c.InitialProducts, emitFn)
 		if err := flushFn(); err != nil {
-			fmt.Fprintf(os.Stderr, "warn: bigquery flush failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "warn: flush failed: %v\n", err)
 		}
-		if err := st.Save(*statePath); err != nil {
+		if err := st.Save(c.State); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: state save failed: %v\n", err)
 		}
 	}
@@ -313,12 +263,12 @@ func cmdRun(args []string) error {
 		select {
 		case <-sigCh:
 			_ = flushFn()
-			return st.Save(*statePath)
+			return st.Save(c.State)
 		case t := <-ticker.C:
 			runOnce(t)
 		case <-analyzeCh:
-			if err := bq.AnalyzeDataset(*dataset, defaultSeedJSON, *profilePath); err == nil {
-				if updated, err := sim.NewEngine(st, defaultSeedJSON, *profilePath); err == nil {
+			if err := bq.AnalyzeDataset(c.Dataset, defaultSeedJSON, c.Profile); err == nil {
+				if updated, err := sim.NewEngine(st, defaultSeedJSON, c.Profile); err == nil {
 					eng.Seed = updated.Seed
 				}
 			}
@@ -326,39 +276,44 @@ func cmdRun(args []string) error {
 	}
 }
 
-func cmdBackfill(args []string) error {
-	fs := flag.NewFlagSet("backfill", flag.ExitOnError)
-	fromStr := fs.String("from", "", "Start timestamp (RFC3339 or YYYY-MM-DD)")
-	toStr := fs.String("to", "", "End timestamp (RFC3339 or YYYY-MM-DD, defaults to now)")
-	days := fs.Int("days", 0, "Backfill N days ending at --to (e.g. --days 3650 for 10 years)")
-	stdout := fs.Bool("stdout", false, "Emit JSON lines to stdout instead of running bq load")
-	rate := fs.Int("rate", 0, "Max JSON lines/sec when --stdout is set (0 = unlimited)")
-	statePath := fs.String("state", "state.gob", "Path to on-disk FK & interval state")
-	profilePath := fs.String("profile", "profile.json", "Path to analyzed statistical profile JSON")
-	initialProducts := fs.Int("initial-products", 14560, "Initial product catalog size on bootstrap (14560 = half of 29120)")
-	force := fs.Bool("force", false, "Re-generate even if minute is already recorded in state")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
+type BackfillCmd struct {
+	From            string `help:"Start timestamp (RFC3339 or YYYY-MM-DD)."`
+	To              string `help:"End timestamp (RFC3339 or YYYY-MM-DD, defaults to now)."`
+	Days            int    `default:"0" help:"Backfill N days ending at --to."`
+	Stdout          bool   `help:"Emit JSON lines to stdout instead of loading into database."`
+	Rate            int    `default:"0" help:"Max JSON lines/sec when --stdout is set (0 = unlimited)."`
+	State           string `default:"state.gob" help:"Path to on-disk FK & interval state."`
+	Profile         string `default:"profile.json" help:"Path to analyzed statistical profile JSON."`
+	InitialProducts int    `name:"initial-products" default:"14560" help:"Initial product catalog size on bootstrap."`
+	Force           bool   `help:"Re-generate even if minute is already recorded in state."`
+	HTTP            string `default:":8080" help:"HTTP listen address for status server."`
+}
 
-	server.RecordCommandRun(*statePath, "backfill", args)
-	server.StartBackgroundServer(*httpAddr, *statePath)
+func (c *BackfillCmd) Run() error {
+	if !c.Stdout {
+		if err := requireEnv(); err != nil {
+			return err
+		}
+	}
+	server.RecordCommandRun(c.State, "backfill", os.Args[2:])
+	server.StartBackgroundServer(c.HTTP, c.State)
 	toTime := time.Now().UTC().Truncate(time.Minute)
-	if *toStr != "" {
+	if c.To != "" {
 		var err error
-		toTime, err = parseTimeArg(*toStr)
+		toTime, err = parseTimeArg(c.To)
 		if err != nil {
 			return err
 		}
 	}
 	var fromTime time.Time
-	if *fromStr != "" {
+	if c.From != "" {
 		var err error
-		fromTime, err = parseTimeArg(*fromStr)
+		fromTime, err = parseTimeArg(c.From)
 		if err != nil {
 			return err
 		}
-	} else if *days > 0 {
-		fromTime = toTime.Add(-time.Duration(*days) * 24 * time.Hour)
+	} else if c.Days > 0 {
+		fromTime = toTime.Add(-time.Duration(c.Days) * 24 * time.Hour)
 	} else {
 		return fmt.Errorf("specify --from <timestamp> or --days <N>")
 	}
@@ -366,11 +321,11 @@ func cmdBackfill(args []string) error {
 		return fmt.Errorf("--from (%s) is after --to (%s)", model.FmtTS(fromTime), model.FmtTS(toTime))
 	}
 
-	st, err := model.LoadState(*statePath)
+	st, err := model.LoadState(c.State)
 	if err != nil {
 		return err
 	}
-	eng, err := sim.NewEngine(st, defaultSeedJSON, *profilePath)
+	eng, err := sim.NewEngine(st, defaultSeedJSON, c.Profile)
 	if err != nil {
 		return err
 	}
@@ -378,14 +333,14 @@ func cmdBackfill(args []string) error {
 	totalMinutes := int(toTime.Sub(fromTime).Minutes()) + 1
 	totalDays := float64(totalMinutes) / 1440.0
 	targetDesc := "BigQuery (" + os.Getenv("GCP_PROJECT") + "." + os.Getenv("GCP_DATASET") + ")"
-	if *stdout {
+	if c.Stdout {
 		targetDesc = "stdout"
 	} else if isPostgres() {
 		targetDesc = fmt.Sprintf("PostgreSQL/AlloyDB (%s)", postgresSchema(""))
 	}
 
 	fmt.Fprintf(os.Stderr, "==> [backfill] Starting backfill: %s -> %s\n", model.FmtTS(fromTime), model.FmtTS(toTime))
-	fmt.Fprintf(os.Stderr, "    Span: %.1f days (%d minutes) | Target: %s | State: %s\n", totalDays, totalMinutes, targetDesc, *statePath)
+	fmt.Fprintf(os.Stderr, "    Span: %.1f days (%d minutes) | Target: %s | State: %s\n", totalDays, totalMinutes, targetDesc, c.State)
 	startTime := time.Now()
 
 	reportInterval := 1440
@@ -413,15 +368,15 @@ func cmdBackfill(args []string) error {
 	var finish func(steps, skipped int) error
 	batchInterval := 14400
 
-	if *stdout {
-		emitter := NewJSONEmitter(os.Stdout, *rate)
+	if c.Stdout {
+		emitter := NewJSONEmitter(os.Stdout, c.Rate)
 		emitFn = emitter.Emit
 		batchInterval = 1440
 		flushBatch = func(time.Time) error {
 			if err := emitter.Flush(); err != nil {
 				return err
 			}
-			return st.Save(*statePath)
+			return st.Save(c.State)
 		}
 		finish = func(steps, skipped int) error {
 			_ = emitter.Flush()
@@ -441,7 +396,7 @@ func cmdBackfill(args []string) error {
 			if err := sink.Flush(); err != nil {
 				return err
 			}
-			return st.Save(*statePath)
+			return st.Save(c.State)
 		}
 		finish = func(steps, skipped int) error {
 			fmt.Fprintf(os.Stderr, "    [backfill] Final batch flush to %s...\n", targetDesc)
@@ -474,14 +429,14 @@ func cmdBackfill(args []string) error {
 	steps, skipped, minuteIdx := 0, 0, 0
 	for cur := fromTime; !cur.After(toTime); cur = cur.Add(time.Minute) {
 		minuteIdx++
-		if !*force && st.IsMinuteCovered(cur) {
+		if !c.Force && st.IsMinuteCovered(cur) {
 			skipped++
 			if minuteIdx%reportInterval == 0 || cur.Equal(toTime) {
 				printProgress(cur, minuteIdx, steps, skipped)
 			}
 			continue
 		}
-		eng.Tick(cur, *initialProducts, emitFn)
+		eng.Tick(cur, c.InitialProducts, emitFn)
 		steps++
 		if steps%batchInterval == 0 {
 			if err := flushBatch(cur); err != nil {
@@ -496,25 +451,31 @@ func cmdBackfill(args []string) error {
 	if err := finish(steps, skipped); err != nil {
 		return err
 	}
-	return st.Save(*statePath)
+	return st.Save(c.State)
 }
 
-func cmdGaps(args []string) error {
-	fs := flag.NewFlagSet("gaps", flag.ExitOnError)
-	statePath := fs.String("state", "state.gob", "Path to on-disk state")
-	profilePath := fs.String("profile", "profile.json", "Path to statistical profile JSON")
-	fill := fs.Bool("fill", false, "Immediately backfill all detected gaps")
-	stdout := fs.Bool("stdout", false, "Emit JSON lines to stdout when --fill is set")
-	rate := fs.Int("rate", 0, "Max JSON lines/sec when --fill and --stdout are set (0 = unlimited)")
-	checkBQ := fs.Bool("check-bq", false, "Also query BigQuery dataset for latest timestamp gaps")
-	dataset := fs.String("dataset", defaultDataset(), "BigQuery project.schema for --check-bq (env: GCP_PROJECT, GCP_DATASET)")
-	initialProducts := fs.Int("initial-products", 14560, "Initial products when filling")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
+type GapsCmd struct {
+	State           string `default:"state.gob" help:"Path to on-disk state."`
+	Profile         string `default:"profile.json" help:"Path to statistical profile JSON."`
+	Fill            bool   `help:"Immediately backfill all detected gaps."`
+	Stdout          bool   `help:"Emit JSON lines to stdout when --fill is set."`
+	Rate            int    `default:"0" help:"Max JSON lines/sec when --fill and --stdout are set (0 = unlimited)."`
+	CheckBQ         bool   `name:"check-bq" help:"Also query BigQuery dataset for latest timestamp gaps."`
+	Dataset         string `help:"BigQuery project.schema for --check-bq."`
+	InitialProducts int    `name:"initial-products" default:"14560" help:"Initial products when filling."`
+	HTTP            string `default:":8080" help:"HTTP listen address for status server."`
+}
 
-	server.RecordCommandRun(*statePath, "gaps", args)
-	server.StartBackgroundServer(*httpAddr, *statePath)
-	st, err := model.LoadState(*statePath)
+func (c *GapsCmd) Run() error {
+	if err := requireEnv(); err != nil {
+		return err
+	}
+	if c.Dataset == "" {
+		c.Dataset = defaultDataset()
+	}
+	server.RecordCommandRun(c.State, "gaps", os.Args[2:])
+	server.StartBackgroundServer(c.HTTP, c.State)
+	st, err := model.LoadState(c.State)
 	if err != nil {
 		return err
 	}
@@ -522,21 +483,20 @@ func cmdGaps(args []string) error {
 	now := time.Now().UTC().Truncate(time.Minute)
 	gaps := server.FindGaps(st, now)
 
-	if *checkBQ {
-		q := fmt.Sprintf("SELECT max(string(created_at)) AS max_ts FROM `%s.events`", *dataset)
+	if c.CheckBQ {
+		q := fmt.Sprintf("SELECT max(string(created_at)) AS max_ts FROM `%s.events`", c.Dataset)
 		if out, err := bq.RunQuery("", q, true, 0); err == nil {
 			var rows []map[string]string
 			if json.Unmarshal(out, &rows) == nil && len(rows) > 0 && rows[0]["max_ts"] != "" {
-				fmt.Fprintf(os.Stderr, "BigQuery %s.events latest timestamp: %s\n", *dataset, rows[0]["max_ts"])
+				fmt.Fprintf(os.Stderr, "BigQuery %s.events latest timestamp: %s\n", c.Dataset, rows[0]["max_ts"])
 			}
 		}
 	}
 
 	if len(st.Intervals) == 0 {
-		fmt.Fprintf(os.Stderr, "No intervals recorded yet in %s. Run initial 10-year backfill:\n  thelook backfill --days 3650 --state %s\n", *statePath, *statePath)
+		fmt.Fprintf(os.Stderr, "No intervals recorded yet in %s. Run initial 10-year backfill:\n  thelook backfill --days 3650 --state %s\n", c.State, c.State)
 		return nil
 	}
-
 	if len(gaps) == 0 {
 		fmt.Fprintf(os.Stderr, "No gaps detected across %d recorded interval(s).\n", len(st.Intervals))
 		return nil
@@ -545,23 +505,23 @@ func cmdGaps(args []string) error {
 	for i, g := range gaps {
 		mins := int(g.To.Sub(g.From).Minutes()) + 1
 		fmt.Fprintf(os.Stderr, "Gap #%d (%d mins): %s -> %s\n  Command: thelook backfill --from %s --to %s --state %s\n",
-			i+1, mins, model.FmtTS(g.From), model.FmtTS(g.To), model.FmtTS(g.From), model.FmtTS(g.To), *statePath)
+			i+1, mins, model.FmtTS(g.From), model.FmtTS(g.To), model.FmtTS(g.From), model.FmtTS(g.To), c.State)
 	}
 
-	if *fill {
-		eng, err := sim.NewEngine(st, defaultSeedJSON, *profilePath)
+	if c.Fill {
+		eng, err := sim.NewEngine(st, defaultSeedJSON, c.Profile)
 		if err != nil {
 			return err
 		}
-		if *stdout {
-			emitter := NewJSONEmitter(os.Stdout, *rate)
+		if c.Stdout {
+			emitter := NewJSONEmitter(os.Stdout, c.Rate)
 			for _, g := range gaps {
 				for cur := g.From; !cur.After(g.To); cur = cur.Add(time.Minute) {
-					eng.Tick(cur, *initialProducts, emitter.Emit)
+					eng.Tick(cur, c.InitialProducts, emitter.Emit)
 				}
 			}
 			_ = emitter.Flush()
-			return st.Save(*statePath)
+			return st.Save(c.State)
 		}
 		ctx := context.Background()
 		if isPostgres() {
@@ -572,13 +532,13 @@ func cmdGaps(args []string) error {
 			defer sink.Close()
 			for _, g := range gaps {
 				for cur := g.From; !cur.After(g.To); cur = cur.Add(time.Minute) {
-					eng.Tick(cur, *initialProducts, sink.Emit)
+					eng.Tick(cur, c.InitialProducts, sink.Emit)
 				}
 				if err := sink.Flush(); err != nil {
 					return err
 				}
 			}
-			return st.Save(*statePath)
+			return st.Save(c.State)
 		}
 		sink, err := bq.NewStorageWriteSink(ctx, os.Getenv("GCP_PROJECT"), os.Getenv("GCP_DATASET"))
 		if err != nil {
@@ -587,45 +547,52 @@ func cmdGaps(args []string) error {
 		defer sink.Close()
 		for _, g := range gaps {
 			for cur := g.From; !cur.After(g.To); cur = cur.Add(time.Minute) {
-				eng.Tick(cur, *initialProducts, sink.Emit)
+				eng.Tick(cur, c.InitialProducts, sink.Emit)
 			}
 			if err := sink.Flush(); err != nil {
 				return err
 			}
 		}
-		return st.Save(*statePath)
+		return st.Save(c.State)
 	}
 	return nil
 }
 
-func cmdAnalyze(args []string) error {
-	fs := flag.NewFlagSet("analyze", flag.ExitOnError)
-	dataset := fs.String("dataset", defaultDataset(), "BigQuery project.schema to analyze (env: GCP_PROJECT, GCP_DATASET)")
-	outPath := fs.String("out", "profile.json", "Output profile JSON path")
-	statePath := fs.String("state", "state.gob", "Path to on-disk state (for command log)")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
-	server.RecordCommandRun(*statePath, "analyze", args)
-	server.StartBackgroundServer(*httpAddr, *statePath)
-	return bq.AnalyzeDataset(*dataset, defaultSeedJSON, *outPath)
+type AnalyzeCmd struct {
+	Dataset string `help:"BigQuery project.schema to analyze."`
+	Out     string `default:"profile.json" help:"Output profile JSON path."`
+	State   string `default:"state.gob" help:"Path to on-disk state (for command log)."`
+	HTTP    string `default:":8080" help:"HTTP listen address for status server."`
 }
 
-func cmdTables(args []string) error {
-	fs := flag.NewFlagSet("tables", flag.ExitOnError)
-	project := fs.String("project", os.Getenv("GCP_PROJECT"), "GCP Project ID (env: GCP_PROJECT)")
-	dataset := fs.String("dataset", os.Getenv("GCP_DATASET"), "Target BigQuery dataset/schema name (env: GCP_DATASET)")
-	apply := fs.Bool("apply", false, "Execute DDL via bq query directly instead of only printing")
-	statePath := fs.String("state", "state.gob", "Path to on-disk state (for command log)")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
+func (c *AnalyzeCmd) Run() error {
+	if err := requireEnv(); err != nil {
+		return err
+	}
+	if c.Dataset == "" {
+		c.Dataset = defaultDataset()
+	}
+	server.RecordCommandRun(c.State, "analyze", os.Args[2:])
+	server.StartBackgroundServer(c.HTTP, c.State)
+	return bq.AnalyzeDataset(c.Dataset, defaultSeedJSON, c.Out)
+}
 
-	server.RecordCommandRun(*statePath, "tables", args)
-	server.StartBackgroundServer(*httpAddr, *statePath)
+type TablesCmd struct {
+	Project string `env:"GCP_PROJECT" help:"GCP Project ID."`
+	Dataset string `env:"GCP_DATASET" help:"Target BigQuery dataset/schema name."`
+	Apply   bool   `help:"Execute DDL directly instead of only printing."`
+	State   string `default:"state.gob" help:"Path to on-disk state (for command log)."`
+	HTTP    string `default:":8080" help:"HTTP listen address for status server."`
+}
+
+func (c *TablesCmd) Run() error {
+	server.RecordCommandRun(c.State, "tables", os.Args[2:])
+	server.StartBackgroundServer(c.HTTP, c.State)
 	if isPostgres() {
-		sch := postgresSchema(*dataset)
+		sch := postgresSchema(c.Dataset)
 		ddl := postgres.TableDDL(sch)
 		fmt.Println(ddl)
-		if *apply {
+		if c.Apply {
 			sink, err := postgres.NewSink(context.Background(), "", sch)
 			if err != nil {
 				return err
@@ -635,33 +602,82 @@ func cmdTables(args []string) error {
 		}
 		return nil
 	}
-	ddl := bq.TableDDL(*project, *dataset)
+	ddl := bq.TableDDL(c.Project, c.Dataset)
 	fmt.Println(ddl)
-	if *apply {
-		_, err := bq.RunQuery(*project, ddl, false, 0)
+	if c.Apply {
+		_, err := bq.RunQuery(c.Project, ddl, false, 0)
 		return err
 	}
 	return nil
 }
 
-func cmdDeploy(args []string) error {
-	fs := flag.NewFlagSet("deploy", flag.ExitOnError)
-	project := fs.String("project", os.Getenv("GCP_PROJECT"), "GCP Project ID (env: GCP_PROJECT)")
-	dataset := fs.String("dataset", os.Getenv("GCP_DATASET"), "Target BigQuery dataset/schema name (env: GCP_DATASET)")
-	fromFY := fs.Int("from-fy", 2016, "Start fiscal year for retail_calendar_454 (inclusive)")
-	toFY := fs.Int("to-fy", 2036, "End fiscal year for retail_calendar_454 (inclusive)")
-	statePath := fs.String("state", "state.gob", "Path to on-disk state (for command log)")
-	httpAddr := fs.String("http", ":8080", "HTTP listen address for status server")
-	fs.Parse(args)
+type DeployCmd struct {
+	Cloud              bool   `help:"Provision full cloud infrastructure (APIs, IAM, Secret Manager, VM, Looker)."`
+	Target             string `enum:"bq,alloydb," default:"" help:"Cloud deployment target: bq or alloydb."`
+	Mode               string `default:"testing" help:"Deployment mode: testing (7d) or production (3650d)."`
+	Project            string `env:"GCP_PROJECT" help:"GCP Project ID."`
+	Dataset            string `env:"GCP_DATASET" help:"Target BigQuery dataset or PostgreSQL schema."`
+	Location           string `default:"US" help:"BigQuery dataset location."`
+	Region             string `default:"us-central1" help:"GCP region."`
+	Zone               string `default:"us-central1-a" help:"GCP zone."`
+	Network            string `default:"default" help:"VPC network."`
+	Cluster            string `default:"thelook-cluster" help:"AlloyDB cluster ID."`
+	Instance           string `default:"thelook-primary" help:"AlloyDB primary instance ID."`
+	AlloyDBMachineType string `name:"alloydb-machine-type" default:"c4a-highmem-1" help:"AlloyDB machine type."`
+	VMName             string `name:"vm-name" help:"Compute Engine VM name."`
+	MachineType        string `name:"machine-type" default:"e2-micro" help:"Compute Engine VM machine type."`
+	Image              string `env:"IMAGE" default:"us-central1-docker.pkg.dev/lkr-dev-production/thelook-generator/thelook-generator:latest" help:"Container image URI."`
+	UseBinary          bool   `name:"use-binary" help:"Compile binary from source instead of pulling container."`
+	Local              bool   `help:"Run generator locally instead of provisioning a Compute Engine VM."`
+	Days               int    `default:"0" help:"Backfill days (defaults to 7 for testing, 3650 for production)."`
+	Password           string `env:"DB_PASSWORD" help:"AlloyDB postgres password."`
+	Secret             string `env:"SECRET" help:"Dashboard HTTP authentication secret."`
+	Port               string `default:"8080" help:"Status server port."`
+	Looker             bool   `help:"Register Looker connection via Looker SDK."`
+	LookerPSC          bool   `name:"looker-psc" help:"Configure Looker Core Hybrid Private Service Connect pipeline."`
+	LookerInstance     string `name:"looker-instance" help:"Looker Core instance name."`
+	LookerRegion       string `name:"looker-region" help:"Looker Core region."`
+	LookerNetwork      string `name:"looker-network" help:"Looker PSC VPC network."`
+	PSCDomain          string `name:"psc-domain" default:"alloydb.thelook.internal" help:"PSC domain for AlloyDB."`
+	LookerConn         string `name:"looker-connection" help:"Looker connection name."`
+	LookerHost         string `name:"looker-host" help:"Override Looker database host."`
+	LookerBaseURL      string `name:"looker-base-url" env:"LOOKERSDK_BASE_URL" help:"Looker SDK base URL."`
+	LookerClientID     string `name:"looker-client-id" env:"LOOKERSDK_CLIENT_ID" help:"Looker SDK client ID."`
+	LookerSecret       string `name:"looker-client-secret" env:"LOOKERSDK_CLIENT_SECRET" help:"Looker SDK client secret."`
+	SAKey              string `name:"sa-key" env:"SA_KEY_FILE" help:"Service account JSON key file for BigQuery Looker connection."`
+	AuthorizedNetworks string `name:"authorized-networks" help:"Comma-separated CIDR blocks for AlloyDB public IP."`
+	FromFY             int    `name:"from-fy" default:"2016" help:"Start fiscal year for retail_calendar_454."`
+	ToFY               int    `name:"to-fy" default:"2036" help:"End fiscal year for retail_calendar_454."`
+	State              string `default:"state.gob" help:"Path to on-disk state."`
+	HTTP               string `default:":8080" help:"HTTP listen address for status server."`
+}
 
-	if *fromFY > *toFY {
-		return fmt.Errorf("--from-fy (%d) must be <= --to-fy (%d)", *fromFY, *toFY)
+func (d *DeployCmd) Run() error {
+	if d.Cloud || d.Target != "" || d.Looker || d.LookerPSC || d.VMName != "" {
+		if d.Target == "" {
+			if isPostgres() {
+				d.Target = "alloydb"
+			} else {
+				d.Target = "bq"
+			}
+		}
+		return d.runCloud(defaultRunner)
 	}
-	server.RecordCommandRun(*statePath, "deploy", args)
-	server.StartBackgroundServer(*httpAddr, *statePath)
+	return d.deploySchemaOnly()
+}
+
+func (d *DeployCmd) deploySchemaOnly() error {
+	if err := requireEnv(); err != nil && d.Project == "" && !isPostgres() {
+		return err
+	}
+	if d.FromFY > d.ToFY {
+		return fmt.Errorf("--from-fy (%d) must be <= --to-fy (%d)", d.FromFY, d.ToFY)
+	}
+	server.RecordCommandRun(d.State, "deploy", os.Args[2:])
+	server.StartBackgroundServer(d.HTTP, d.State)
 
 	if isPostgres() {
-		sch := postgresSchema(*dataset)
+		sch := postgresSchema(d.Dataset)
 		sink, err := postgres.NewSink(context.Background(), "", sch)
 		if err != nil {
 			return err
@@ -671,77 +687,89 @@ func cmdDeploy(args []string) error {
 		if err := sink.ApplyDDL(context.Background()); err != nil {
 			return fmt.Errorf("failed to apply table DDL: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Generating and loading retail_calendar_454 (FY%d..FY%d)...\n", *fromFY, *toFY)
-		sim.EmitRetailCalendar454(*fromFY, *toFY, sink.Emit)
+		fmt.Fprintf(os.Stderr, "Generating and loading retail_calendar_454 (FY%d..FY%d)...\n", d.FromFY, d.ToFY)
+		sim.EmitRetailCalendar454(d.FromFY, d.ToFY, sink.Emit)
 		return sink.Flush()
 	}
 
-	ddl := bq.TableDDL(*project, *dataset)
-	fmt.Fprintf(os.Stderr, "Creating BigQuery dataset and %d tables in %s.%s...\n", len(bq.AllTables), *project, *dataset)
-	if _, err := bq.RunQuery(*project, ddl, false, 0); err != nil {
+	ddl := bq.TableDDL(d.Project, d.Dataset)
+	fmt.Fprintf(os.Stderr, "Creating BigQuery dataset and %d tables in %s.%s...\n", len(bq.AllTables), d.Project, d.Dataset)
+	if _, err := bq.RunQuery(d.Project, ddl, false, 0); err != nil {
 		return fmt.Errorf("failed to apply table DDL: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Generating and loading retail_calendar_454 (FY%d..FY%d)...\n", *fromFY, *toFY)
-	sink, err := bq.NewBatchLoadSink(*project, *dataset)
+	fmt.Fprintf(os.Stderr, "Generating and loading retail_calendar_454 (FY%d..FY%d)...\n", d.FromFY, d.ToFY)
+	sink, err := bq.NewBatchLoadSink(d.Project, d.Dataset)
 	if err != nil {
 		return err
 	}
-	sim.EmitRetailCalendar454(*fromFY, *toFY, sink.Emit)
+	sim.EmitRetailCalendar454(d.FromFY, d.ToFY, sink.Emit)
 	return sink.FlushAndLoad()
 }
 
+type DestroyCmd struct {
+	Target         string `default:"all" enum:"bq,alloydb,all" help:"Cloud target to tear down: bq, alloydb, or all."`
+	Project        string `env:"GCP_PROJECT" help:"GCP Project ID."`
+	Dataset        string `env:"GCP_DATASET" help:"Target BigQuery dataset or PostgreSQL schema."`
+	Region         string `default:"us-central1" help:"GCP region."`
+	Zone           string `default:"us-central1-a" help:"GCP zone."`
+	Network        string `default:"default" help:"VPC network."`
+	Cluster        string `default:"thelook-cluster" help:"AlloyDB cluster ID."`
+	Instance       string `default:"thelook-primary" help:"AlloyDB primary instance ID."`
+	VMName         string `name:"vm-name" help:"Compute Engine VM name."`
+	LookerConn     string `name:"looker-connection" help:"Looker connection name."`
+	LookerInstance string `name:"looker-instance" help:"Looker Core instance name."`
+	LookerRegion   string `name:"looker-region" default:"us-east1" help:"Looker Core region."`
+	LookerNetwork  string `name:"looker-network" help:"Looker PSC VPC network."`
+	PSCDomain      string `name:"psc-domain" default:"alloydb.thelook.internal" help:"PSC domain attached to Looker."`
+	LookerBaseURL  string `name:"looker-base-url" env:"LOOKERSDK_BASE_URL" help:"Looker SDK base URL."`
+	LookerClientID string `name:"looker-client-id" env:"LOOKERSDK_CLIENT_ID" help:"Looker SDK client ID."`
+	LookerSecret   string `name:"looker-client-secret" env:"LOOKERSDK_CLIENT_SECRET" help:"Looker SDK client secret."`
+	DeleteTables   bool   `name:"delete-tables" help:"Only drop the 14 database tables and local state."`
+	State          string `default:"state.gob" help:"Path to on-disk state to remove."`
+	Profile        string `default:"profile.json" help:"Path to profile JSON to remove."`
+	Yes            bool   `short:"y" help:"Skip interactive confirmation."`
+	DryRun         bool   `name:"dry-run" help:"Print teardown commands without executing them."`
+
+	// Component flags: default to tearing down everything; pass --no-<flag> to keep specific resources.
+	VM             bool `default:"true" negatable:"" help:"Delete Compute Engine generator VM(s) and firewall rule."`
+	Database       bool `default:"true" negatable:"" help:"Drop BigQuery dataset/tables and/or delete AlloyDB instance, cluster, and VPC range."`
+	Looker         bool `default:"true" negatable:"" help:"Delete Looker connection(s) and detach PSC from Looker Core instance."`
+	PSC            bool `default:"true" negatable:"" help:"Delete Looker Core Hybrid PSC pipeline (attachment, forwarding rule, proxy, backend, NEG, subnet)."`
+	Secrets        bool `default:"true" negatable:"" help:"Delete TheLook secrets from GCP Secret Manager."`
+	ServiceAccount bool `name:"service-account" default:"true" negatable:"" help:"Revoke IAM role bindings added to the Compute Engine default service account."`
+	LocalState     bool `name:"local-state" default:"true" negatable:"" help:"Remove local state.gob, profile.json, and command logs."`
+}
+
+func (d *DestroyCmd) Run() error {
+	return d.execute(os.Stdin, defaultRunner)
+}
+
 func cmdDestroy(args []string, in io.Reader) error {
-	fs := flag.NewFlagSet("destroy", flag.ExitOnError)
-	project := fs.String("project", os.Getenv("GCP_PROJECT"), "GCP Project ID (env: GCP_PROJECT)")
-	dataset := fs.String("dataset", os.Getenv("GCP_DATASET"), "Target BigQuery dataset/schema name (env: GCP_DATASET)")
-	deleteTables := fs.Bool("delete-tables", false, "Drop all 14 BigQuery tables in <project>.<dataset> after interactive confirmation")
-	statePath := fs.String("state", "state.gob", "Path to on-disk state to remove")
-	profilePath := fs.String("profile", "profile.json", "Path to profile JSON to remove")
-	fs.Parse(args)
+	return runDestroyArgs(args, in, defaultRunner)
+}
 
-	if *deleteTables {
-		if isPostgres() {
-			sch := postgresSchema(*dataset)
-			fmt.Fprintf(os.Stderr, "Confirm deleting all %d tables in PostgreSQL schema %s by typing %q: ", len(postgres.AllTables), sch, sch)
-			line, err := bufio.NewReader(in).ReadString('\n')
-			if err != nil && err != io.EOF {
-				return fmt.Errorf("reading confirmation: %w", err)
-			}
-			if got := strings.TrimSpace(line); got != sch {
-				return fmt.Errorf("aborted: confirmation %q did not match %q", got, sch)
-			}
-			sink, err := postgres.NewSink(context.Background(), "", sch)
-			if err != nil {
-				return err
-			}
-			defer sink.Close()
-			fmt.Fprintf(os.Stderr, "Dropping %d tables in %s...\n", len(postgres.AllTables), sch)
-			if err := sink.DropTables(context.Background()); err != nil {
-				return fmt.Errorf("failed to drop tables: %w", err)
-			}
-		} else {
-			target := fmt.Sprintf("%s.%s", *project, *dataset)
-			fmt.Fprintf(os.Stderr, "Confirm deleting all %d tables in %s by typing %q: ", len(bq.AllTables), target, target)
-			line, err := bufio.NewReader(in).ReadString('\n')
-			if err != nil && err != io.EOF {
-				return fmt.Errorf("reading confirmation: %w", err)
-			}
-			if got := strings.TrimSpace(line); got != target {
-				return fmt.Errorf("aborted: confirmation %q did not match %q", got, target)
-			}
-			ddl := bq.DropTablesDDL(*project, *dataset)
-			fmt.Fprintf(os.Stderr, "Dropping %d tables in %s...\n", len(bq.AllTables), target)
-			if _, err := bq.RunQuery(*project, ddl, false, 0); err != nil {
-				return fmt.Errorf("failed to drop tables: %w", err)
-			}
-		}
+func runDestroyArgs(args []string, in io.Reader, run cmdRunner) error {
+	var cli CLI
+	parser, err := kong.New(&cli)
+	if err != nil {
+		return err
 	}
+	if _, err := parser.Parse(append([]string{"destroy"}, args...)); err != nil {
+		return err
+	}
+	return cli.Destroy.execute(in, run)
+}
 
-	for _, p := range []string{*statePath, *statePath + ".tmp", server.CommandLogPath(*statePath), *profilePath} {
-		if err := os.Remove(p); err == nil {
-			fmt.Fprintf(os.Stderr, "Removed %s\n", p)
-		}
+func main() {
+	var cli CLI
+	ctx := kong.Parse(&cli,
+		kong.Name("thelook"),
+		kong.Description("TheLook synthetic e-commerce event and CDC data generator (BigQuery & AlloyDB)."),
+		kong.UsageOnError(),
+	)
+	if err := ctx.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
-	return nil
 }

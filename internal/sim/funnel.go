@@ -120,8 +120,21 @@ func (e *Engine) signupUser(ts time.Time, loc model.LocationProfile, emit func(a
 		TrafficSource: userTrafficSrcs[e.rng.IntN(len(userTrafficSrcs))],
 	}
 	e.State.Users = append(e.State.Users, u)
+	if e.rng.Float64() < 0.05 {
+		e.State.PowerUserIDs = append(e.State.PowerUserIDs, u.ID)
+	} else if e.rng.Float64() < 0.0105 {
+		e.State.HeavyBrowserIDs = append(e.State.HeavyBrowserIDs, u.ID)
+	}
 	emit(u)
 	return u
+}
+
+func (e *Engine) lookupUser(id int64) model.UserRow {
+	idx := id - 1
+	if idx >= 0 && idx < int64(len(e.State.Users)) && e.State.Users[idx].ID == id {
+		return e.State.Users[idx]
+	}
+	return e.State.Users[e.rng.IntN(len(e.State.Users))]
 }
 
 func (e *Engine) runBrowseSession(ts time.Time, emit func(any)) {
@@ -134,80 +147,134 @@ func (e *Engine) runBrowseSession(ts time.Time, emit func(any)) {
 		adEventID = &id
 	}
 
-	p := e.pickBrowsedProduct(ts)
 	secOffset := e.rng.IntN(30)
 	evTime := ts.Add(time.Duration(secOffset) * time.Second)
 	loc := e.Seed.Locations[e.rng.IntN(len(e.Seed.Locations))]
 	anonUser := model.UserRow{City: loc.City, State: loc.State, Country: loc.Country, Zip: loc.Zip, Latitude: loc.Lat, Longitude: loc.Lon}
 
-	roll := e.rng.Float64()
-	if len(e.State.Users) > 0 && roll < 0.35 {
-		seq := int64(1)
-		e.emitWebEvent(evTime, sessionID, seq, nil, adEventID, anonUser, ob[0], ob[1], tsrc, "/home", "Home", emit)
-		seq++
-		evTime = evTime.Add(time.Duration(3+e.rng.IntN(10)) * time.Second)
-		e.emitWebEvent(evTime, sessionID, seq, nil, adEventID, anonUser, ob[0], ob[1], tsrc,
-			fmt.Sprintf("/department/%s/category/%s", p.Department, p.Category), "Category", emit)
-		seq++
-		evTime = evTime.Add(time.Duration(3+e.rng.IntN(10)) * time.Second)
-		e.emitWebEvent(evTime, sessionID, seq, nil, adEventID, anonUser, ob[0], ob[1], tsrc,
-			fmt.Sprintf("/product/%d", p.ID), "Product", emit)
-		return
+	if len(e.State.HeavyBrowserIDs) == 0 && len(e.State.Users) >= 100 {
+		for _, existU := range e.State.Users {
+			if existU.ID > 0 && existU.ID%100 == 7 {
+				e.State.HeavyBrowserIDs = append(e.State.HeavyBrowserIDs, existU.ID)
+			}
+		}
+	}
+	if len(e.State.PowerUserIDs) == 0 && len(e.State.Users) >= 20 {
+		for _, existU := range e.State.Users {
+			if existU.ID > 0 && existU.ID%20 == 0 {
+				e.State.PowerUserIDs = append(e.State.PowerUserIDs, existU.ID)
+			}
+		}
 	}
 
-	var u model.UserRow
+	roll := e.rng.Float64()
+	var (
+		u              model.UserRow
+		uid            *int64
+		activeUser     model.UserRow
+		isHeavyBrowser bool
+		isPowerUser    bool
+		medianLen      = 5.0
+	)
+
 	seq := int64(1)
-	if roll < 0.55 || len(e.State.Users) == 0 {
+	p := e.pickBrowsedProduct(ts)
+
+	if len(e.State.Users) > 0 && roll < 0.35 {
+		activeUser = anonUser
+		medianLen = 4.0
+		e.emitWebEvent(evTime, sessionID, seq, nil, adEventID, anonUser, ob[0], ob[1], tsrc, "/home", "Home", emit)
+	} else if roll < 0.55 || len(e.State.Users) == 0 {
 		e.emitWebEvent(evTime, sessionID, seq, nil, adEventID, anonUser, ob[0], ob[1], tsrc,
 			fmt.Sprintf("/department/%s/category/%s/brand/%s", p.Department, p.Category, p.Brand), "Brand", emit)
 		seq++
 		evTime = evTime.Add(time.Duration(2+e.rng.IntN(6)) * time.Second)
 		u = e.signupUser(evTime, loc, emit)
-		uid := u.ID
-		e.emitWebEvent(evTime, sessionID, seq, &uid, adEventID, u, ob[0], ob[1], tsrc, "/register", "Register", emit)
-		seq++
-		evTime = evTime.Add(time.Duration(2+e.rng.IntN(6)) * time.Second)
-		e.emitWebEvent(evTime, sessionID, seq, &uid, adEventID, u, ob[0], ob[1], tsrc,
-			fmt.Sprintf("/product/%d", p.ID), "Product", emit)
+		userID := u.ID
+		uid = &userID
+		activeUser = u
+		e.emitWebEvent(evTime, sessionID, seq, uid, adEventID, u, ob[0], ob[1], tsrc, "/register", "Register", emit)
 	} else {
-		u = e.State.Users[e.rng.IntN(len(e.State.Users))]
-		uid := u.ID
+		isHeavyBrowser = len(e.State.HeavyBrowserIDs) > 0 && e.rng.Float64() < 0.06
+		if isHeavyBrowser {
+			powerID := e.State.HeavyBrowserIDs[e.rng.IntN(len(e.State.HeavyBrowserIDs))]
+			u = e.lookupUser(powerID)
+			medianLen = 12.0
+		} else if len(e.State.PowerUserIDs) > 0 && e.rng.Float64() < 0.16 {
+			powerID := e.State.PowerUserIDs[e.rng.IntN(len(e.State.PowerUserIDs))]
+			u = e.lookupUser(powerID)
+			isPowerUser = true
+			medianLen = 5.0
+		} else {
+			u = e.State.Users[e.rng.IntN(len(e.State.Users))]
+			userFactor := 0.6 + 0.8*float64((u.ID*2654435761)%100)/100.0
+			medianLen = 5.0 * userFactor
+		}
+		userID := u.ID
+		uid = &userID
+		activeUser = u
+
 		if e.rng.Float64() < 0.5 {
-			e.emitWebEvent(evTime, sessionID, seq, &uid, adEventID, u, ob[0], ob[1], tsrc,
+			e.emitWebEvent(evTime, sessionID, seq, uid, adEventID, u, ob[0], ob[1], tsrc,
 				fmt.Sprintf("/department/%s/category/%s", p.Department, p.Category), "Category", emit)
 		} else {
-			e.emitWebEvent(evTime, sessionID, seq, &uid, adEventID, u, ob[0], ob[1], tsrc,
+			e.emitWebEvent(evTime, sessionID, seq, uid, adEventID, u, ob[0], ob[1], tsrc,
 				fmt.Sprintf("/department/%s/category/%s/brand/%s", p.Department, p.Category, p.Brand), "Brand", emit)
 		}
-		seq++
-		evTime = evTime.Add(time.Duration(2+e.rng.IntN(8)) * time.Second)
-		e.emitWebEvent(evTime, sessionID, seq, &uid, adEventID, u, ob[0], ob[1], tsrc,
-			fmt.Sprintf("/product/%d", p.ID), "Product", emit)
 	}
 
-	trafficMult, _, _ := CalendarSeason(ts)
-	viewChance := 0.60
-	if trafficMult > 1.5 {
-		viewChance = 0.75
-	}
-	if e.rng.Float64() < viewChance {
-		var due int64
-		if e.rng.Float64() < 0.65 {
-			due = min(ts.Unix()+59, evTime.Unix()+int64(3+e.rng.IntN(12)))
+	// Always view at least one product in every session before possible cart/purchase
+	seq++
+	evTime = evTime.Add(time.Duration(2+e.rng.IntN(8)) * time.Second)
+	e.emitWebEvent(evTime, sessionID, seq, uid, adEventID, activeUser, ob[0], ob[1], tsrc,
+		fmt.Sprintf("/product/%d", p.ID), "Product", emit)
+
+	sessionEvents := max(int(seq), int(math.Round(-medianLen*math.Log(max(1e-9, e.rng.Float64()))/0.69314718056)))
+
+	for seq < int64(sessionEvents) {
+		seq++
+		evTime = evTime.Add(time.Duration(2+e.rng.IntN(8)) * time.Second)
+		p = e.pickBrowsedProduct(ts)
+		if seq%2 == 0 {
+			e.emitWebEvent(evTime, sessionID, seq, uid, adEventID, activeUser, ob[0], ob[1], tsrc,
+				fmt.Sprintf("/product/%d", p.ID), "Product", emit)
 		} else {
-			due = evTime.Unix() + int64(60+e.rng.IntN(43200))
+			e.emitWebEvent(evTime, sessionID, seq, uid, adEventID, activeUser, ob[0], ob[1], tsrc,
+				fmt.Sprintf("/department/%s/category/%s", p.Department, p.Category), "Category", emit)
 		}
-		e.State.ViewedItems = append(e.State.ViewedItems, model.FunnelItem{
-			UserID:        u.ID,
-			ProductID:     p.ID,
-			SessionID:     sessionID,
-			SeqNum:        seq,
-			AdEventID:     adEventID,
-			OS:            ob[0],
-			Browser:       ob[1],
-			TrafficSource: tsrc,
-			DueUnix:       due,
-		})
+	}
+
+	if uid != nil {
+		trafficMult, _, _ := CalendarSeason(ts)
+		cartChance := 0.55
+		if trafficMult > 1.5 {
+			cartChance = 0.70
+		}
+		if isHeavyBrowser {
+			cartChance = 0.03
+		} else if isPowerUser {
+			cartChance = 0.75
+		}
+
+		if e.rng.Float64() < cartChance {
+			var due int64
+			if e.rng.Float64() < 0.65 {
+				due = min(ts.Unix()+59, evTime.Unix()+int64(3+e.rng.IntN(12)))
+			} else {
+				due = evTime.Unix() + int64(60+e.rng.IntN(43200))
+			}
+			e.State.ViewedItems = append(e.State.ViewedItems, model.FunnelItem{
+				UserID:        *uid,
+				ProductID:     p.ID,
+				SessionID:     sessionID,
+				SeqNum:        seq,
+				AdEventID:     adEventID,
+				OS:            ob[0],
+				Browser:       ob[1],
+				TrafficSource: tsrc,
+				DueUnix:       due,
+			})
+		}
 	}
 }
 
@@ -290,6 +357,7 @@ func (e *Engine) completePurchase(buyTime time.Time, ci model.FunnelItem, emit f
 		SalePrice:       salePrice,
 		Status:          "Processing",
 		CreatedAt:       soldAtStr,
+		IsPrimaryItem:   true,
 	}
 	e.emitOrderAndTx(po, emit)
 	emit(model.CombinedOrdersUsersRow{
@@ -324,18 +392,25 @@ func (e *Engine) emitOrderAndTx(po model.PendingOrder, emit func(any)) {
 		DeliveredAt:     po.DeliveredAt,
 	})
 
-	u := e.State.Users[po.UserID-1]
+	items := po.OrderItems
+	if len(items) == 0 {
+		items = []model.TxItem{{
+			InventoryItemID: po.InventoryItemID,
+			ReturnedAt:      po.ReturnedAt,
+			SalePrice:       po.SalePrice,
+		}}
+	} else if !po.IsPrimaryItem {
+		return
+	}
+
+	u := e.lookupUser(po.UserID)
 	emit(model.TransactionDetailRow{
 		OrderID:     po.OrderID,
 		Status:      po.Status,
 		CreatedAt:   po.CreatedAt,
 		ShippedAt:   po.ShippedAt,
 		DeliveredAt: po.DeliveredAt,
-		Items: []model.TxItem{{
-			InventoryItemID: po.InventoryItemID,
-			ReturnedAt:      po.ReturnedAt,
-			SalePrice:       po.SalePrice,
-		}},
+		Items:       items,
 		User: model.TxUser{
 			UserID:        u.ID,
 			Name:          strings.ToUpper(u.FirstName + " " + u.LastName),
@@ -383,4 +458,148 @@ func (e *Engine) emitWebEvent(ts time.Time, sessionID string, seq int64, userID 
 		AdEventID:      adEventID,
 		ReferrerCode:   ref,
 	})
+}
+
+// pickFraudProducts selects count high-value products sampled without replacement
+// from the catalog, shuffling candidates so successive fraud orders do not repeat identical items.
+func (e *Engine) pickFraudProducts(count int) []model.ProductMeta {
+	for _, minPrice := range []float64{120.0, 60.0, 0.0} {
+		var pool []model.ProductMeta
+		for _, p := range e.State.Products {
+			if p.RetailPrice >= minPrice {
+				pool = append(pool, p)
+			}
+		}
+		if len(pool) >= count || minPrice == 0.0 {
+			e.rng.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+			return pool[:min(count, len(pool))]
+		}
+	}
+	return nil
+}
+
+// EmitFraudAnomaly executes a high-velocity multi-item fraudulent purchasing anomaly.
+// The perpetrator registers a direct account, immediately views and carts 6-12 high-value
+// items, and completes checkout as a single multi-item order.
+func (e *Engine) EmitFraudAnomaly(ts time.Time, emit func(any)) {
+	if len(e.State.Products) == 0 {
+		return
+	}
+
+	count := 6 + e.rng.IntN(7) // 6 to 12 items
+	prods := e.pickFraudProducts(count)
+	if len(prods) == 0 {
+		return
+	}
+
+	secOffset := e.rng.IntN(20)
+	evTime := ts.Add(time.Duration(secOffset) * time.Second)
+	loc := e.Seed.Locations[e.rng.IntN(len(e.Seed.Locations))]
+	u := e.signupUser(evTime, loc, emit)
+	sessionID := e.newUUID()
+	ob := osBrowsers[e.rng.IntN(len(osBrowsers))]
+	tsrc := "Direct"
+	if e.rng.Float64() < 0.30 {
+		tsrc = "Search"
+	}
+	userID := u.ID
+	uid := &userID
+
+	var seq int64 = 1
+	e.emitWebEvent(evTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, "/register", "Register", emit)
+
+	for _, p := range prods {
+		evTime = evTime.Add(time.Duration(1+e.rng.IntN(3)) * time.Second)
+		seq++
+		e.emitWebEvent(evTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, fmt.Sprintf("/product/%d", p.ID), "Product", emit)
+
+		evTime = evTime.Add(time.Duration(1+e.rng.IntN(2)) * time.Second)
+		seq++
+		e.emitWebEvent(evTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, "/cart", "Cart", emit)
+	}
+
+	buyTime := evTime.Add(time.Duration(2+e.rng.IntN(4)) * time.Second)
+	seq++
+	e.emitWebEvent(buyTime, sessionID, seq, uid, nil, u, ob[0], ob[1], tsrc, "/purchase", "Purchase", emit)
+
+	orderID := e.State.NextOrderID
+	e.State.NextOrderID++
+	soldAtStr := model.FmtTS(buyTime)
+
+	var txItems []model.TxItem
+	var orderPendingItems []model.PendingOrder
+
+	for _, p := range prods {
+		avail := e.State.AvailableInventory[p.ID]
+		if len(avail) == 0 {
+			for i := 0; i < 2; i++ {
+				avail = append(avail, e.stockInventoryItem(p, buyTime, emit))
+			}
+		}
+		invID := avail[0]
+		e.State.AvailableInventory[p.ID] = avail[1:]
+
+		createdDate := e.State.InventoryCreated[invID]
+		if createdDate == "" {
+			createdDate = model.FmtDate(buyTime)
+		}
+
+		emit(model.InventoryItemRow{
+			ID:                          invID,
+			ProductID:                   p.ID,
+			CreatedAt:                   createdDate,
+			SoldAt:                      &soldAtStr,
+			Cost:                        p.Cost,
+			ProductCategory:             p.Category,
+			ProductName:                 p.Name,
+			ProductBrand:                p.Brand,
+			ProductRetailPrice:          p.RetailPrice,
+			ProductDepartment:           p.Department,
+			ProductSKU:                  p.SKU,
+			ProductDistributionCenterID: p.DCID,
+		})
+
+		oiID := e.State.NextOrderItemID
+		e.State.NextOrderItemID++
+
+		txItems = append(txItems, model.TxItem{
+			InventoryItemID: invID,
+			SalePrice:       p.RetailPrice,
+		})
+
+		orderPendingItems = append(orderPendingItems, model.PendingOrder{
+			OrderItemID:     oiID,
+			OrderID:         orderID,
+			UserID:          u.ID,
+			InventoryItemID: invID,
+			SalePrice:       p.RetailPrice,
+			Status:          "Processing",
+			CreatedAt:       soldAtStr,
+		})
+	}
+
+	isCancelled := e.rng.Float64() < 0.35
+	var nextStatus string
+	var nextDue int64
+	if isCancelled {
+		nextStatus = "Cancelled"
+		nextDue = buyTime.Unix() + int64(600+e.rng.IntN(3000))
+	} else {
+		nextStatus = "Shipped"
+		shipDays := 1 + e.rng.IntN(3)
+		if IsPeakLogistics(buyTime) {
+			shipDays = 3 + e.rng.IntN(5)
+		}
+		nextDue = buyTime.Unix() + int64(86400*shipDays)
+	}
+
+	for i := range orderPendingItems {
+		orderPendingItems[i].NextStatus = nextStatus
+		orderPendingItems[i].NextDueUnix = nextDue
+		orderPendingItems[i].OrderItems = txItems
+		orderPendingItems[i].IsPrimaryItem = i == 0
+		e.emitOrderAndTx(orderPendingItems[i], emit)
+	}
+	emit(model.CombinedOrdersUsersRow{UserID: u.ID})
+	e.State.PendingOrders = append(e.State.PendingOrders, orderPendingItems...)
 }
