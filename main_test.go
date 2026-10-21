@@ -895,7 +895,7 @@ func TestDeployAlloyDBTwoTierAndOffsetAlignment(t *testing.T) {
 		"compute instances create thelook-alloydb-gen",
 		"--shielded-secure-boot",
 		"run jobs create thelook-backfill",
-		"--network=default --subnet=default --vpc-egress=private-ranges-only",
+		"--network=default --vpc-egress=private-ranges-only",
 		"--set-secrets=DATABASE_URL=thelook-alloydb-url:latest,SECRET=thelook-dashboard-secret:latest",
 		"--cpu=4 --memory=8Gi --task-timeout=24h",
 		"--args=backfill,--days=3650,--state=/tmp/state.gob",
@@ -944,6 +944,11 @@ func TestDeployAlloyDBTwoTierAndOffsetAlignment(t *testing.T) {
 	}
 	if !strings.Contains(joinedBF, "--to=2026-10-21T20:25:00Z") || !strings.Contains(joinedBF, "run jobs execute thelook-backfill") {
 		t.Fatalf("expected --backfill-only to configure --to and execute job, got:\n%s", joinedBF)
+	}
+	dBadTo := newAlloyDeploy()
+	dBadTo.To = "not-a-timestamp"
+	if err := dBadTo.runCloud(mockRun); err == nil || !strings.Contains(err.Error(), "invalid --to timestamp") {
+		t.Fatalf("expected upfront --to validation error, got: %v", err)
 	}
 
 	// 5. Decoupled live VM ID offset + exact-second status API timestamps

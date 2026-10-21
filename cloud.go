@@ -49,10 +49,16 @@ func saveSecret(project, name, val string, run cmdRunner) {
 		_, _ = run("gcloud", "secrets", "create", name, "--replication-policy=automatic", "--project="+project, "--quiet")
 	}
 	if f, err := os.CreateTemp("", "thelook-sec-*"); err == nil {
-		_, _ = f.WriteString(val)
+		if _, err := f.WriteString(val); err != nil {
+			fmt.Fprintf(os.Stderr, "warn: failed to write secret %s: %v\n", name, err)
+		}
 		_ = f.Close()
 		defer os.Remove(f.Name())
-		_, _ = run("gcloud", "secrets", "versions", "add", name, "--data-file="+f.Name(), "--project="+project, "--quiet")
+		if _, err := run("gcloud", "secrets", "versions", "add", name, "--data-file="+f.Name(), "--project="+project, "--quiet"); err != nil {
+			fmt.Fprintf(os.Stderr, "warn: failed to add secret version for %s: %v\n", name, err)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "warn: failed to create temp file for secret %s: %v\n", name, err)
 	}
 }
 
@@ -79,6 +85,11 @@ func promptIfEmpty(val, label string, secret bool) string {
 func (d *DeployCmd) runCloud(run cmdRunner) error {
 	if d.VMOnly && d.BackfillOnly {
 		return fmt.Errorf("--vm-only and --backfill-only are mutually exclusive")
+	}
+	if d.To != "" {
+		if _, err := parseTimeArg(d.To); err != nil {
+			return fmt.Errorf("invalid --to timestamp: %w", err)
+		}
 	}
 	d.Project = resolveProject(d.Project, run)
 	if d.Project == "" {
@@ -368,7 +379,6 @@ func (d *DeployCmd) provisionAlloyDBBackfillJob(run cmdRunner) error {
 		"--image=" + cmp.Or(d.Image, defaultImage),
 		"--region=" + d.Region,
 		"--network=" + d.Network,
-		"--subnet=" + d.Network,
 		"--vpc-egress=private-ranges-only",
 		"--set-env-vars=" + envVars,
 		"--set-secrets=DATABASE_URL=thelook-alloydb-url:latest,SECRET=thelook-dashboard-secret:latest",

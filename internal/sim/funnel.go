@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"cmp"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -141,10 +142,13 @@ func (e *Engine) lookupUser(id int64) model.UserRow {
 }
 
 func (e *Engine) lookupProduct(id int64) model.ProductMeta {
+	if len(e.State.Products) == 0 {
+		return model.ProductMeta{}
+	}
 	if idx := id - 1; idx >= 0 && idx < int64(len(e.State.Products)) && e.State.Products[idx].ID == id {
 		return e.State.Products[idx]
 	}
-	if i := slices.IndexFunc(e.State.Products, func(p model.ProductMeta) bool { return p.ID == id }); i >= 0 {
+	if i, ok := slices.BinarySearchFunc(e.State.Products, id, func(p model.ProductMeta, t int64) int { return cmp.Compare(p.ID, t) }); ok {
 		return e.State.Products[i]
 	}
 	return e.State.Products[0]
