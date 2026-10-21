@@ -202,6 +202,9 @@ func (c *RunCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	if !st.Bootstrapped {
+		st.ApplyIDOffset(1_000_000_000)
+	}
 	eng, err := sim.NewEngine(st, defaultSeedJSON, c.Profile)
 	if err != nil {
 		return err
@@ -255,7 +258,12 @@ func (c *RunCmd) Run() error {
 		}
 	}
 
-	runOnce(time.Now())
+	now := time.Now().UTC()
+	if st.GeneratorStartedAt == "" {
+		st.GeneratorStartedAt = model.FmtTS(now)
+	}
+	fmt.Fprintf(os.Stderr, "==> [run] Started at %s (first tick: %s)\n", model.FmtTS(now), model.FmtTS(now.Truncate(time.Minute)))
+	runOnce(now)
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
@@ -339,9 +347,10 @@ func (c *BackfillCmd) Run() error {
 		targetDesc = fmt.Sprintf("PostgreSQL/AlloyDB (%s)", postgresSchema(""))
 	}
 
-	fmt.Fprintf(os.Stderr, "==> [backfill] Starting backfill: %s -> %s\n", model.FmtTS(fromTime), model.FmtTS(toTime))
+	startTime := time.Now().UTC()
+	st.BackfillStartedAt = model.FmtTS(startTime)
+	fmt.Fprintf(os.Stderr, "==> [backfill] Started at %s | Range: %s -> %s\n", st.BackfillStartedAt, model.FmtTS(fromTime), model.FmtTS(toTime))
 	fmt.Fprintf(os.Stderr, "    Span: %.1f days (%d minutes) | Target: %s | State: %s\n", totalDays, totalMinutes, targetDesc, c.State)
-	startTime := time.Now()
 
 	reportInterval := 1440
 	if totalDays > 180 {
@@ -451,6 +460,7 @@ func (c *BackfillCmd) Run() error {
 	if err := finish(steps, skipped); err != nil {
 		return err
 	}
+	st.BackfillCompletedAt = model.FmtTS(time.Now().UTC())
 	return st.Save(c.State)
 }
 
@@ -626,6 +636,10 @@ type DeployCmd struct {
 	AlloyDBMachineType string `name:"alloydb-machine-type" default:"c4a-highmem-1" help:"AlloyDB machine type."`
 	VMName             string `name:"vm-name" help:"Compute Engine VM name."`
 	MachineType        string `name:"machine-type" default:"e2-micro" help:"Compute Engine VM machine type."`
+	VMOnly             bool   `name:"vm-only" help:"Provision database and VM only, skipping Cloud Run backfill job."`
+	BackfillOnly       bool   `name:"backfill-only" help:"Create/update and execute the Cloud Run backfill job only, skipping VM provisioning."`
+	Job                bool   `name:"job" help:"Execute the Cloud Run backfill job immediately after deployment."`
+	To                 string `help:"End timestamp (RFC3339 or YYYY-MM-DD) for the Cloud Run backfill job."`
 	Image              string `env:"IMAGE" default:"us-central1-docker.pkg.dev/lkr-dev-production/thelook-generator/thelook-generator:latest" help:"Container image URI."`
 	UseBinary          bool   `name:"use-binary" help:"Compile binary from source instead of pulling container."`
 	Local              bool   `help:"Run generator locally instead of provisioning a Compute Engine VM."`
@@ -653,7 +667,7 @@ type DeployCmd struct {
 }
 
 func (d *DeployCmd) Run() error {
-	if d.Cloud || d.Target != "" || d.Looker || d.LookerPSC || d.VMName != "" {
+	if d.Cloud || d.Target != "" || d.Looker || d.LookerPSC || d.VMName != "" || d.VMOnly || d.BackfillOnly || d.Job {
 		if d.Target == "" {
 			if isPostgres() {
 				d.Target = "alloydb"

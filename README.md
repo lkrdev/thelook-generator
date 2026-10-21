@@ -128,15 +128,15 @@ Users are never generated upfront during bootstrap. Instead, new users sign up o
 
 ### Command log and authenticated HTTP status server
 
-- Every CLI invocation appends a debug entry (`timestamp`, `command`, `args`, `pid`) to `commands.jsonl` alongside `state.gob`.
+- Every CLI invocation appends a debug entry (`timestamp` to the UTC second, `command`, `args`, `pid`) to `commands.jsonl` alongside `state.gob`.
 - Whenever any CLI command runs, an HTTP status server starts on `--http :8080` (in the background for generator commands, or in the foreground via `thelook status`).
 - Visiting `GET /` without `?key=` renders only a Key input box. Submitting the key updates `window.location` with `?key=<SECRET>` and reloads the page.
-- `GET /api/status?key=<SECRET>` validates the query parameter against `SECRET` in constant time (`401 Unauthorized` if missing or invalid) and reads `state.gob` and `commands.jsonl` on demand to return entity counts, detected downtime gaps with copy-pasteable `thelook backfill` commands, recorded coverage intervals, and recent CLI executions.
+- `GET /api/status?key=<SECRET>` validates the query parameter against `SECRET` in constant time (`401 Unauthorized` if missing or invalid) and reads `state.gob` and `commands.jsonl` on demand to return exact UTC start timestamps (`generator_started_at`, `first_tick_at`, `backfill_started_at`, `backfill_completed_at`), entity counts, detected downtime gaps with copy-pasteable `thelook backfill` commands, recorded coverage intervals, and recent CLI executions.
 - Downtime is never auto-backfilled on `thelook run` startup; it is recorded as an interval gap that can be inspected and filled with `thelook gaps` or viewed in the status UI.
 
-## Automated One-Command Deployment (Cloud Shell / Console)
+## Automated Cloud Deployment (Cloud Shell / Console)
 
-Open Google Cloud Console, launch **Cloud Shell**, and clone this repo:
+Open Google Cloud Console, launch Cloud Shell, and clone this repo:
 
 ```bash
 git clone https://github.com/lkrdev/thelook-generator.git
@@ -145,10 +145,10 @@ cd thelook-generator
 
 ### Option A: Deploy to BigQuery (Compute Engine VM)
 
-Provisions a Free Tier Compute Engine VM (`thelook-bq-gen`), creates the BigQuery dataset, deploys tables and retail calendar, backfills historical data, and runs live streaming CDC as a background systemd service:
+Provisions a Free Tier Compute Engine VM (`thelook-bq-gen` with `--shielded-secure-boot`), creates the BigQuery dataset, deploys tables and retail calendar, backfills historical data, and runs live streaming CDC as a background systemd service:
 
 ```bash
-# 1. Testing (minimal backfill: 7 days - deploys container by default):
+# 1. Testing (minimal backfill: 7 days, deploys container by default):
 ./deploy-bq.sh
 
 # 2. Production (full backfill: 3650 days / 10 years):
@@ -157,32 +157,86 @@ Provisions a Free Tier Compute Engine VM (`thelook-bq-gen`), creates the BigQuer
 # 3. Explicitly build binary from source instead of container:
 ./deploy-bq.sh --use-binary
 
-# 4. Also register the `thelook_bq` BigQuery connection in Looker (prompts for Base URL, Client ID, and Client Secret):
+# 4. Also register the `thelook_bq` BigQuery connection in Looker:
 ./deploy-bq.sh --looker
+
+# 5. Tear down cloud resources:
+./deploy-bq.sh --destroy
 ```
 
-### Option B: Deploy to AlloyDB (Separate Compute Engine VM)
+### Option B: Deploy to AlloyDB (Two-Tier VM + Cloud Run Backfill)
 
-Minimally provisions an AlloyDB cluster and 1-vCPU single-zone primary instance (`c4a-highmem-1`, `ZONAL`), configures VPC Private Services Access peering, and provisions a Free Tier Compute Engine VM (`thelook-alloydb-gen`, `e2-micro` with 2 GB swap) that deploys the schema, runs backfill, and runs the streaming generator as a systemd service:
+Running a 10-year backfill (5.25 million simulated minutes) inside an `e2-micro` VM (1 GB RAM) thrashes swap and delays the systemd daemon. Instead, `./deploy-alloydb.sh` decouples continuous streaming from the bulk historical load:
+
+- A Free Tier Compute Engine VM (`thelook-alloydb-gen`, `e2-micro` with Shielded VM secure boot) applies the schema, loads `retail_calendar_454`, and immediately runs the live 1-minute streaming daemon (`thelook run --http :8080`) in ~12 MB of RAM.
+- A serverless Cloud Run Job (`thelook-backfill`, 4 vCPUs, 8 GiB RAM, Direct VPC egress to the AlloyDB private IP) handles the heavy multi-year historical load and shuts down with zero idle cost.
+- Faults or retries in the bulk backfill never interrupt live event streaming or the HTTP status server.
+
+```mermaid
+flowchart LR
+  subgraph VPC["VPC Network (default)"]
+    VM["GCE e2-micro VM (thelook run :8080)"]
+    JOB["Cloud Run Job (thelook-backfill, 4 vCPU / 8 GiB)"]
+    DB[("AlloyDB Primary (ZONAL, Private IP)")]
+    VM -->|"1-min CDC upserts"| DB
+    JOB -->|"Direct VPC Egress batch upserts"| DB
+  end
+  SM["Secret Manager (DATABASE_URL, SECRET)"] -.-> VM
+  SM -.-> JOB
+  LOOKER["Looker (Public IP or PSC)"] --> DB
+```
+
+Step 1: Deploy AlloyDB, secrets, live VM generator, and the Cloud Run backfill job definition:
 
 ```bash
-# 1. Testing (minimal backfill: 7 days, 1-vCPU ZONAL AlloyDB + Free Tier e2-micro GCE VM - deploys container by default):
-./deploy-alloydb.sh
-
-# 2. Production (full backfill: 3650 days / 10 years):
+# Default deploy (1-vCPU ZONAL AlloyDB, e2-micro live VM, and Cloud Run backfill job):
 ./deploy-alloydb.sh --mode production
 
-# 3. Explicitly build binary from source instead of container:
-./deploy-alloydb.sh --use-binary
+# Or deploy and trigger the Cloud Run backfill job immediately:
+./deploy-alloydb.sh --mode production --job
 
-# 4. Use custom container image:
-./deploy-alloydb.sh --image us-central1-docker.pkg.dev/YOUR_PROJECT/thelook-generator/thelook-generator:latest
+# Deploy only the database and live VM (skip Cloud Run job):
+./deploy-alloydb.sh --vm-only
 
-# 5. Also whitelist Looker public_egress_ip_addresses on AlloyDB and register the `thelook_alloydb` Looker connection:
-./deploy-alloydb.sh --looker
+# Also whitelist Looker egress IPs on AlloyDB and register `thelook_alloydb`:
+./deploy-alloydb.sh --mode production --looker
 
-# 6. Looker Core Hybrid / Private Service Connect (PSC) deployments:
-./deploy-alloydb.sh --looker --looker-host alloydb.thelook.internal
+# Looker Core Hybrid / Private Service Connect (PSC) deployments:
+./deploy-alloydb.sh --mode production --looker --looker-host alloydb.thelook.internal
+```
+
+Step 2: Trigger the historical backfill on Cloud Run (bounded to the exact VM start timestamp):
+
+When `thelook run` starts on a fresh VM, it records `generator_started_at` (to the UTC second) and `first_tick_at` (its first simulated minute) in `/var/lib/thelook/state.gob`, and offsets live primary keys by `1,000,000,000` while sharing a deterministic initial product catalog so live writes and historical backfill rows never collide.
+
+```bash
+# Run with default configured window:
+gcloud run jobs execute thelook-backfill --region=us-central1
+
+# Or bound --to using the exact first_tick_at reported by the VM status API:
+gcloud run jobs execute thelook-backfill --region=us-central1 \
+  --args="backfill,--days=3650,--to=2026-10-21T20:25:00Z,--state=/tmp/state.gob"
+
+# Or update and execute only the backfill job via the deploy wrapper:
+./deploy-alloydb.sh --backfill-only --mode production --to 2026-10-21T20:25:00Z
+```
+
+Every AlloyDB write uses `ON CONFLICT ... DO NOTHING` or `DO UPDATE` on mutable CDC tables (`inventory_items`, `order_items`, `transaction_detail`), making overlapping minute boundaries idempotent.
+
+Step 3: View live status or tear down:
+
+```bash
+# SSH tunnel to the authenticated status dashboard:
+gcloud compute ssh thelook-alloydb-gen --zone=us-central1-a -- -L 8080:localhost:8080
+
+# Or query the JSON status API directly for exact start timestamps and counts:
+curl -s "http://<VM_IP>:8080/api/status?key=<SECRET>"
+
+# Inspect and heal any missed intervals on the VM:
+thelook gaps --state /var/lib/thelook/state.gob --fill
+
+# Tear down AlloyDB, VM, Cloud Run job, PSC, Looker connection, and secrets:
+./deploy-alloydb.sh --destroy
 ```
 
 #### Looker Core Hybrid / Private Service Connect (PSC) Deployments
@@ -269,10 +323,11 @@ GCP Free Tier includes one `e2-micro` instance per month in `us-central1`, `us-w
 gcloud compute instances create-with-container thelook-gen \
   --zone=us-central1-a \
   --machine-type=e2-micro \
+  --shielded-secure-boot \
   --boot-disk-type=pd-standard \
   --boot-disk-size=30GB \
   --scopes=https://www.googleapis.com/auth/bigquery \
-  --container-image=gcr.io/YOUR_PROJECT_ID/thelook-generator:latest \
+  --container-image=us-central1-docker.pkg.dev/lkr-dev-production/thelook-generator/thelook-generator:latest \
   --container-env=GCP_PROJECT=looker-private-demo,GCP_DATASET=ecomm,SECRET=change-me \
   --container-restart-policy=always \
   --container-mount-host-path=mount-path=/data,host-path=/var/lib/thelook,mode=rw

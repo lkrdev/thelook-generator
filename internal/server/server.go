@@ -94,9 +94,12 @@ async function loadStatus() {
     data.commands.map(c => '<tr><td><code>' + esc(c.timestamp) + '</code></td><td>' + c.pid + '</td><td><code>' + esc(c.command) + '</code></td><td><code>' + esc((c.args || []).join(' ')) + '</code></td></tr>').join('') +
     '</tbody></table>';
 
+  const startedHtml = (data.generator_started_at ? ' | Generator started: <code>' + esc(data.generator_started_at) + '</code>' : '') +
+    (data.first_tick_at ? ' | First tick: <code>' + esc(data.first_tick_at) + '</code>' : '');
+
   app.innerHTML =
     '<h1>thelook-generator status</h1>' +
-    '<div class="meta">Updated at <code>' + esc(data.generated_at) + '</code> | State file: <code>' + esc(data.state_path) + '</code></div>' +
+    '<div class="meta">Updated at <code>' + esc(data.generated_at) + '</code>' + startedHtml + ' | State file: <code>' + esc(data.state_path) + '</code></div>' +
     '<div class="cards">' +
       '<div class="card"><div class="label">Brands</div><div class="val">' + data.brands + '</div></div>' +
       '<div class="card"><div class="label">Products</div><div class="val">' + data.products + '</div></div>' +
@@ -172,20 +175,28 @@ func NewStatusMux(statePath string) *http.ServeMux {
 				Minutes: iv.EndMin - iv.StartMin + 1,
 			}
 		}
+		firstTickAt := ""
+		if len(ivs) > 0 {
+			firstTickAt = ivs[0].Start
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"generated_at":   model.FmtTS(now),
-			"state_path":     statePath,
-			"brands":         len(st.OnboardedBrands),
-			"products":       len(st.Products),
-			"users":          len(st.Users),
-			"orders":         st.NextOrderID - 1,
-			"events":         st.NextEventID - 1,
-			"viewed_items":   len(st.ViewedItems),
-			"carted_items":   len(st.CartedItems),
-			"pending_orders": len(st.PendingOrders),
-			"gaps":           gaps,
-			"intervals":      ivs,
-			"commands":       ReadCommandLog(statePath),
+			"generated_at":          model.FmtTS(now),
+			"generator_started_at":  st.GeneratorStartedAt,
+			"first_tick_at":         firstTickAt,
+			"backfill_started_at":   st.BackfillStartedAt,
+			"backfill_completed_at": st.BackfillCompletedAt,
+			"state_path":            statePath,
+			"brands":                len(st.OnboardedBrands),
+			"products":              len(st.Products),
+			"users":                 len(st.Users),
+			"orders":                max(int64(0), st.NextOrderID-1-st.IDOffset),
+			"events":                max(int64(0), st.NextEventID-1-st.IDOffset),
+			"viewed_items":          len(st.ViewedItems),
+			"carted_items":          len(st.CartedItems),
+			"pending_orders":        len(st.PendingOrders),
+			"gaps":                  gaps,
+			"intervals":             ivs,
+			"commands":              ReadCommandLog(statePath),
 		})
 	})
 	return mux
