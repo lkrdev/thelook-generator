@@ -416,6 +416,7 @@ func TestDestroyAndDropDDL(t *testing.T) {
 		"networks subnets delete alloydb-psc-nat-subnet",
 		"compute instances delete thelook-bq-gen",
 		"compute instances delete thelook-alloydb-gen",
+		"run jobs delete thelook-backfill",
 		"firewall-rules delete allow-thelook-status",
 		"bq rm -r -f -d looker-private-demo:ecomm",
 		"alloydb instances delete thelook-primary",
@@ -839,4 +840,165 @@ func TestFraudAnomalyScheduleAndExecution(t *testing.T) {
 		t.Fatalf("expected 1-3 fraudulent multi-item transactions in 24 hours, got %d", fraudTxCount)
 	}
 }
+
+func TestDeployAlloyDBTwoTierAndOffsetAlignment(t *testing.T) {
+	var executed []string
+	var startupScript string
+	privIP := "10.128.0.5"
+	mockRun := func(name string, args ...string) (string, error) {
+		cmdStr := name + " " + strings.Join(args, " ")
+		executed = append(executed, cmdStr)
+		for _, a := range args {
+			if path, ok := strings.CutPrefix(a, "--metadata-from-file=startup-script="); ok {
+				b, _ := os.ReadFile(path)
+				startupScript = string(b)
+			}
+		}
+		switch {
+		case strings.Contains(cmdStr, "format=value(projectNumber)"):
+			return "123456789", nil
+		case strings.Contains(cmdStr, "format=value(ipAddress)"):
+			return privIP, nil
+		case strings.Contains(cmdStr, "format=value(networkInterfaces[0].accessConfigs[0].natIP)"):
+			return "34.120.0.10", nil
+		}
+		return "", nil
+	}
+
+	newAlloyDeploy := func() DeployCmd {
+		return DeployCmd{
+			Cloud:              true,
+			Target:             "alloydb",
+			Mode:               "production",
+			Project:            "demo-proj",
+			Region:             "us-central1",
+			Zone:               "us-central1-a",
+			Network:            "default",
+			Cluster:            "thelook-cluster",
+			Instance:           "thelook-primary",
+			AlloyDBMachineType: "c4a-highmem-1",
+			MachineType:        "e2-micro",
+			Image:              defaultImage,
+			Secret:             "sec-123",
+			Password:           "pw-123",
+		}
+	}
+
+	// 1. Default AlloyDB deploy: provisions VM without boot backfill + creates Cloud Run backfill job without executing
+	d := newAlloyDeploy()
+	if err := d.runCloud(mockRun); err != nil {
+		t.Fatalf("default deployAlloyDB failed: %v", err)
+	}
+	joined := strings.Join(executed, "\n")
+	for _, want := range []string{
+		"services enable --project=demo-proj compute.googleapis.com logging.googleapis.com secretmanager.googleapis.com alloydb.googleapis.com servicenetworking.googleapis.com run.googleapis.com",
+		"compute instances create thelook-alloydb-gen",
+		"--shielded-secure-boot",
+		"run jobs create thelook-backfill",
+		"--network=default --subnet=default --vpc-egress=private-ranges-only",
+		"--set-secrets=DATABASE_URL=thelook-alloydb-url:latest,SECRET=thelook-dashboard-secret:latest",
+		"--cpu=4 --memory=8Gi --task-timeout=24h",
+		"--args=backfill,--days=3650,--state=/tmp/state.gob",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected default deploy to contain %q, got:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "run jobs execute") {
+		t.Fatalf("did not expect default deploy without --job to execute Cloud Run job")
+	}
+	if !strings.Contains(startupScript, "if [ 0 -gt 0 ];") {
+		t.Fatalf("expected VM startup script to disable boot backfill (0 days), got:\n%s", startupScript)
+	}
+
+	// 2. Missing AlloyDB private IP errors cleanly
+	privIP = ""
+	dMissingIP := newAlloyDeploy()
+	if err := dMissingIP.runCloud(mockRun); err == nil || !strings.Contains(err.Error(), "failed to obtain AlloyDB private IP") {
+		t.Fatalf("expected missing private IP error, got: %v", err)
+	}
+	privIP = "10.128.0.5"
+
+	// 3. --vm-only skips Cloud Run job creation
+	executed = nil
+	dVM := newAlloyDeploy()
+	dVM.VMOnly = true
+	if err := dVM.runCloud(mockRun); err != nil {
+		t.Fatalf("--vm-only deploy failed: %v", err)
+	}
+	if strings.Contains(strings.Join(executed, "\n"), "run jobs") {
+		t.Fatalf("expected --vm-only to skip Cloud Run job commands")
+	}
+
+	// 4. --backfill-only with --to skips VM provisioning and executes bounded Cloud Run job
+	executed = nil
+	dBF := newAlloyDeploy()
+	dBF.BackfillOnly = true
+	dBF.To = "2026-10-21T20:25:00Z"
+	if err := dBF.runCloud(mockRun); err != nil {
+		t.Fatalf("--backfill-only deploy failed: %v", err)
+	}
+	joinedBF := strings.Join(executed, "\n")
+	if strings.Contains(joinedBF, "compute instances create") {
+		t.Fatalf("expected --backfill-only to skip VM creation")
+	}
+	if !strings.Contains(joinedBF, "--to=2026-10-21T20:25:00Z") || !strings.Contains(joinedBF, "run jobs execute thelook-backfill") {
+		t.Fatalf("expected --backfill-only to configure --to and execute job, got:\n%s", joinedBF)
+	}
+
+	// 5. Decoupled live VM ID offset + exact-second status API timestamps
+	stBackfill := model.NewState()
+	engBackfill, _ := sim.NewEngine(stBackfill, defaultSeedJSON, "")
+	stLive := model.NewState()
+	stLive.ApplyIDOffset(1_000_000_000)
+	stLive.GeneratorStartedAt = "2026-10-21T20:25:14Z"
+	engLive, _ := sim.NewEngine(stLive, defaultSeedJSON, "")
+
+	ts := time.Date(2026, 10, 21, 20, 25, 0, 0, time.UTC)
+	engBackfill.Bootstrap(ts, 20, func(any) {})
+	engLive.Bootstrap(ts, 20, func(any) {})
+	for i := range stBackfill.Products {
+		if stBackfill.Products[i] != stLive.Products[i] {
+			t.Fatalf("product %d mismatch between backfill and live bootstrap: %+v vs %+v", i, stBackfill.Products[i], stLive.Products[i])
+		}
+	}
+
+	for m := 0; m < 30; m++ {
+		engLive.Tick(ts.Add(time.Duration(m)*time.Minute), 20, func(row any) {
+			switch r := row.(type) {
+			case model.UserRow:
+				if r.ID <= 1_000_000_000 {
+					t.Fatalf("expected offset live user ID > 1B, got %d", r.ID)
+				}
+			case model.EventRow:
+				if r.ID <= 1_000_000_000 {
+					t.Fatalf("expected offset live event ID > 1B, got %d", r.ID)
+				}
+			case model.OrderItemRow:
+				if r.ID <= 1_000_000_000 || r.OrderID <= 1_000_000_000 {
+					t.Fatalf("expected offset live order IDs > 1B, got item=%d order=%d", r.ID, r.OrderID)
+				}
+			}
+		})
+	}
+
+	tmpState := filepath.Join(t.TempDir(), "state.gob")
+	if err := stLive.Save(tmpState); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	t.Setenv("SECRET", "s3cr3t")
+	w := httptest.NewRecorder()
+	server.NewStatusMux(tmpState).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/status?key=s3cr3t", nil))
+	var status map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal status failed: %v", err)
+	}
+	if status["generator_started_at"] != "2026-10-21T20:25:14Z" || status["first_tick_at"] != "2026-10-21T20:25:00Z" {
+		t.Fatalf("unexpected start timestamps in status: %+v", status)
+	}
+	if evCnt, ok := status["events"].(float64); !ok || evCnt <= 0 || evCnt >= 1_000_000 {
+		t.Fatalf("expected offset-adjusted event count in (0, 1M), got %v", status["events"])
+	}
+}
+
 

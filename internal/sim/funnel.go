@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -130,11 +131,23 @@ func (e *Engine) signupUser(ts time.Time, loc model.LocationProfile, emit func(a
 }
 
 func (e *Engine) lookupUser(id int64) model.UserRow {
-	idx := id - 1
-	if idx >= 0 && idx < int64(len(e.State.Users)) && e.State.Users[idx].ID == id {
+	if len(e.State.Users) == 0 {
+		return model.UserRow{}
+	}
+	if idx := id - e.State.Users[0].ID; idx >= 0 && idx < int64(len(e.State.Users)) && e.State.Users[idx].ID == id {
 		return e.State.Users[idx]
 	}
 	return e.State.Users[e.rng.IntN(len(e.State.Users))]
+}
+
+func (e *Engine) lookupProduct(id int64) model.ProductMeta {
+	if idx := id - 1; idx >= 0 && idx < int64(len(e.State.Products)) && e.State.Products[idx].ID == id {
+		return e.State.Products[idx]
+	}
+	if i := slices.IndexFunc(e.State.Products, func(p model.ProductMeta) bool { return p.ID == id }); i >= 0 {
+		return e.State.Products[i]
+	}
+	return e.State.Products[0]
 }
 
 func (e *Engine) runBrowseSession(ts time.Time, emit func(any)) {
@@ -279,8 +292,8 @@ func (e *Engine) runBrowseSession(ts time.Time, emit func(any)) {
 }
 
 func (e *Engine) completePurchase(buyTime time.Time, ci model.FunnelItem, emit func(any)) {
-	p := e.State.Products[ci.ProductID-1]
-	u := e.State.Users[ci.UserID-1]
+	p := e.lookupProduct(ci.ProductID)
+	u := e.lookupUser(ci.UserID)
 
 	avail := e.State.AvailableInventory[p.ID]
 	if len(avail) == 0 {

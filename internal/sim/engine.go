@@ -39,6 +39,14 @@ func (e *Engine) Bootstrap(ts time.Time, initialProducts int, emit func(any)) {
 		return
 	}
 	e.State.Bootstrapped = true
+	savedRng := e.rng
+	e.rng = rand.New(rand.NewPCG(0x5448454c4f4f4b, 0x424f4f54))
+	defer func() {
+		e.rng = savedRng
+		if e.State.IDOffset > 0 && e.State.NextProductID <= e.State.IDOffset {
+			e.State.NextProductID = e.State.IDOffset + 1
+		}
+	}()
 
 	for _, dc := range e.Seed.DistributionCenters {
 		emit(dc)

@@ -56,6 +56,7 @@ type TimeInterval struct {
 
 type State struct {
 	Bootstrapped    bool
+	IDOffset        int64
 	NextUserID      int64
 	NextProductID   int64
 	NextInventoryID int64
@@ -66,6 +67,10 @@ type State struct {
 	NextAdGroupID   int64
 	NextKeywordID   int64
 	NextAdEventID   int64
+
+	GeneratorStartedAt  string
+	BackfillStartedAt   string
+	BackfillCompletedAt string
 
 	Users           []UserRow
 	PowerUserIDs    []int64
@@ -102,6 +107,17 @@ func NewState() *State {
 		NextAdEventID:      1,
 		AvailableInventory: make(map[int64][]int64),
 		InventoryCreated:   make(map[int64]string),
+	}
+}
+
+// ponytail: fixed 1B ID offset isolates decoupled live VM writes from Cloud Run historical backfill PKs without distributed coordination; switch to DB sequences if backfill exceeds 1B rows.
+func (s *State) ApplyIDOffset(offset int64) {
+	if s.Bootstrapped || s.IDOffset != 0 || offset <= 0 {
+		return
+	}
+	s.IDOffset = offset
+	for _, p := range []*int64{&s.NextUserID, &s.NextInventoryID, &s.NextOrderID, &s.NextOrderItemID, &s.NextEventID, &s.NextCampaignID, &s.NextAdGroupID, &s.NextKeywordID, &s.NextAdEventID} {
+		*p += offset
 	}
 }
 
