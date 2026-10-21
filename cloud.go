@@ -133,7 +133,9 @@ func (d *DeployCmd) runCloud(run cmdRunner) error {
 	if !d.VMOnly && !d.Local {
 		apis = append(apis, "run.googleapis.com")
 	}
-	_, _ = run("gcloud", append([]string{"services", "enable", "--project=" + d.Project}, apis...)...)
+	if _, err := run("gcloud", append([]string{"services", "enable", "--project=" + d.Project}, apis...)...); err != nil {
+		return fmt.Errorf("failed to enable required APIs: %w", err)
+	}
 	saveSecret(d.Project, "thelook-dashboard-secret", d.Secret, run)
 	if d.Looker {
 		saveSecret(d.Project, "lookersdk-base-url", d.LookerBaseURL, run)

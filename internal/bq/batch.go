@@ -141,14 +141,16 @@ func (b *BatchLoadSink) FlushAndLoad() error {
 		}
 		target := fmt.Sprintf("%s:%s.%s", b.project, b.dataset, tbl)
 		fmt.Fprintf(os.Stderr, "Loading %s (%d compressed bytes)...\n", target, fi.Size())
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		src := bigquery.NewReaderSource(f)
-		src.SourceFormat = bigquery.JSON
-		err = runJob(ctx, client.Dataset(b.dataset).Table(tbl).LoaderFrom(src).Run)
-		_ = f.Close()
+		err = func() error {
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			src := bigquery.NewReaderSource(f)
+			src.SourceFormat = bigquery.JSON
+			return runJob(ctx, client.Dataset(b.dataset).Table(tbl).LoaderFrom(src).Run)
+		}()
 		if err != nil {
 			return fmt.Errorf("bq load %s failed: %w", target, err)
 		}

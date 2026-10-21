@@ -90,19 +90,21 @@ func (s *StorageWriteSink) Flush() error {
 			}
 			clear(s.cdcQ[tbl])
 		} else if list := s.appendQ[tbl]; len(list) > 0 {
+			if isSharedSeedTable(tbl) && !s.seeded[tbl] {
+				bqClient, err := bigquery.NewClient(s.ctx, s.project)
+				if err != nil {
+					return fmt.Errorf("create bigquery client for seed deduplication: %w", err)
+				}
+				existing := ExistingIDs(s.ctx, bqClient, s.dataset, tbl)
+				_ = bqClient.Close()
+				s.seeded[tbl] = true
+				list = slices.DeleteFunc(list, func(r any) bool {
+					_, pk, _ := model.RowTable(r)
+					return existing[pk]
+				})
+			}
 			rows = list
 			s.appendQ[tbl] = nil
-			if isSharedSeedTable(tbl) && !s.seeded[tbl] {
-				s.seeded[tbl] = true
-				if bqClient, err := bigquery.NewClient(s.ctx, s.project); err == nil {
-					existing := ExistingIDs(s.ctx, bqClient, s.dataset, tbl)
-					_ = bqClient.Close()
-					rows = slices.DeleteFunc(rows, func(r any) bool {
-						_, pk, _ := model.RowTable(r)
-						return existing[pk]
-					})
-				}
-			}
 		}
 		if len(rows) == 0 {
 			continue
