@@ -1,6 +1,7 @@
 package bq
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,9 +9,52 @@ import (
 	"strconv"
 
 	"thelook-generator/internal/model"
+
+	"cloud.google.com/go/bigquery"
 )
 
+func runJob(ctx context.Context, start func(context.Context) (*bigquery.Job, error)) error {
+	job, err := start(ctx)
+	if err != nil {
+		return err
+	}
+	st, err := job.Wait(ctx)
+	if err != nil {
+		return err
+	}
+	return st.Err()
+}
+
+func ExistingIDs(ctx context.Context, client *bigquery.Client, dataset, table string) map[int64]bool {
+	seen := make(map[int64]bool)
+	it, err := client.Query(fmt.Sprintf("SELECT id FROM `%s.%s.%s`", client.Project(), dataset, table)).Read(ctx)
+	if err != nil {
+		return seen
+	}
+	for {
+		var row []bigquery.Value
+		if it.Next(&row) != nil {
+			break
+		}
+		if len(row) > 0 {
+			if id, ok := row[0].(int64); ok {
+				seen[id] = true
+			}
+		}
+	}
+	return seen
+}
+
 func RunQuery(project, sql string, jsonOutput bool, maxRows int) ([]byte, error) {
+	if !jsonOutput && project != "" {
+		ctx := context.Background()
+		client, err := bigquery.NewClient(ctx, project)
+		if err != nil {
+			return nil, err
+		}
+		defer client.Close()
+		return nil, runJob(ctx, client.Query(sql).Run)
+	}
 	args := []string{"query", "--use_legacy_sql=false"}
 	if project != "" {
 		args = append(args, "--project_id="+project)

@@ -3,9 +3,11 @@ package bq
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"thelook-generator/internal/model"
 
+	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/bigquery/storage/managedwriter"
 )
 
@@ -18,6 +20,7 @@ type StorageWriteSink struct {
 	streams map[string]*managedwriter.ManagedStream
 	appendQ map[string][]any
 	cdcQ    map[string]map[int64]any
+	seeded  map[string]bool
 }
 
 func NewStorageWriteSink(ctx context.Context, project, dataset string) (*StorageWriteSink, error) {
@@ -33,6 +36,7 @@ func NewStorageWriteSink(ctx context.Context, project, dataset string) (*Storage
 		streams: make(map[string]*managedwriter.ManagedStream),
 		appendQ: make(map[string][]any),
 		cdcQ:    make(map[string]map[int64]any),
+		seeded:  make(map[string]bool),
 	}, nil
 }
 
@@ -86,6 +90,19 @@ func (s *StorageWriteSink) Flush() error {
 			}
 			clear(s.cdcQ[tbl])
 		} else if list := s.appendQ[tbl]; len(list) > 0 {
+			if isSharedSeedTable(tbl) && !s.seeded[tbl] {
+				bqClient, err := bigquery.NewClient(s.ctx, s.project)
+				if err != nil {
+					return fmt.Errorf("create bigquery client for seed deduplication: %w", err)
+				}
+				existing := ExistingIDs(s.ctx, bqClient, s.dataset, tbl)
+				_ = bqClient.Close()
+				s.seeded[tbl] = true
+				list = slices.DeleteFunc(list, func(r any) bool {
+					_, pk, _ := model.RowTable(r)
+					return existing[pk]
+				})
+			}
 			rows = list
 			s.appendQ[tbl] = nil
 		}
