@@ -129,9 +129,9 @@ func (d *DeployCmd) runCloud(run cmdRunner) error {
 	apis := []string{"compute.googleapis.com", "logging.googleapis.com", "secretmanager.googleapis.com", "bigquery.googleapis.com"}
 	if d.Target == "alloydb" {
 		apis = []string{"compute.googleapis.com", "logging.googleapis.com", "secretmanager.googleapis.com", "alloydb.googleapis.com", "servicenetworking.googleapis.com"}
-		if !d.VMOnly {
-			apis = append(apis, "run.googleapis.com")
-		}
+	}
+	if !d.VMOnly && !d.Local {
+		apis = append(apis, "run.googleapis.com")
 	}
 	_, _ = run("gcloud", append([]string{"services", "enable", "--project=" + d.Project}, apis...)...)
 	saveSecret(d.Project, "thelook-dashboard-secret", d.Secret, run)
@@ -170,7 +170,6 @@ func (d *DeployCmd) deployBQ(run cmdRunner) error {
 	if d.LookerConn == "" {
 		d.LookerConn = "thelook_bq"
 	}
-	fmt.Fprintf(os.Stderr, "==> Deploying TheLook to BigQuery (%s.%s) [%s: %dd backfill]\n", d.Project, d.Dataset, d.Mode, d.Days)
 
 	bindComputeSARoles(d.Project, []string{
 		"roles/logging.logWriter",
@@ -182,6 +181,14 @@ func (d *DeployCmd) deployBQ(run cmdRunner) error {
 	if _, err := run("gcloud", "alpha", "bq", "datasets", "create", d.Dataset, "--project="+d.Project); err != nil {
 		_, _ = run("bq", "--location="+d.Location, "mk", "-d", d.Project+":"+d.Dataset)
 	}
+
+	bqJobEnv := fmt.Sprintf("GCP_PROJECT=%s,GCP_DATASET=%s", d.Project, d.Dataset)
+	if d.BackfillOnly {
+		return d.provisionBackfillJob("thelook-bq-backfill", "16Gi", bqJobEnv, "SECRET=thelook-dashboard-secret:latest", false, run)
+	}
+
+	fmt.Fprintf(os.Stderr, "==> Provisioning BigQuery (%s.%s) + Compute Engine VM (%s) [%s: %dd Cloud Run backfill]\n",
+		d.Project, d.Dataset, d.MachineType, d.Mode, d.Days)
 
 	if d.Looker {
 		certB64 := ""
@@ -213,7 +220,7 @@ return update_connection(conn_name, body=body) if existing else create_connectio
 			return err
 		}
 		if d.Days > 0 {
-			bf := &BackfillCmd{Days: d.Days, State: d.State, Profile: "profile.json", InitialProducts: 14560, HTTP: d.HTTP}
+			bf := &BackfillCmd{Days: d.Days, To: d.To, State: d.State, Profile: "profile.json", InitialProducts: 14560, HTTP: d.HTTP}
 			if err := bf.Run(); err != nil {
 				return err
 			}
@@ -228,19 +235,32 @@ return update_connection(conn_name, body=body) if existing else create_connectio
 	envBlock := fmt.Sprintf("export GCP_PROJECT=%q GCP_DATASET=%q SECRET=%q", d.Project, d.Dataset, d.Secret)
 	deployCmd := fmt.Sprintf("/usr/local/bin/thelook deploy --project %q --dataset %q", d.Project, d.Dataset)
 	unitEnv := fmt.Sprintf("Environment=GCP_PROJECT=%s\nEnvironment=GCP_DATASET=%s\nEnvironment=SECRET=%s", d.Project, d.Dataset, d.Secret)
-	startup := buildVMStartupScript(envBlock, deployCmd, unitEnv, d.UseBinary, d.Image, d.Days)
+	startup := buildVMStartupScript(envBlock, deployCmd, unitEnv, d.UseBinary, d.Image, 0)
 	if err := provisionGeneratorVM(d.Project, d.Zone, d.VMName, d.MachineType, d.Network, startup, run); err != nil {
 		return err
 	}
+	vmIP, _ := run("gcloud", "compute", "instances", "describe", d.VMName, "--zone="+d.Zone, "--project="+d.Project, "--format=value(networkInterfaces[0].accessConfigs[0].natIP)")
+
+	if !d.VMOnly {
+		if err := d.provisionBackfillJob("thelook-bq-backfill", "16Gi", bqJobEnv, "SECRET=thelook-dashboard-secret:latest", false, run); err != nil {
+			return err
+		}
+	}
 
 	fmt.Fprintf(os.Stderr, "\n=================================================================\n")
-	fmt.Fprintf(os.Stderr, "  TheLook BigQuery Generator running on VM: %s (%s)\n", d.VMName, d.Zone)
 	fmt.Fprintf(os.Stderr, "  Target Dataset:     %s.%s\n", d.Project, d.Dataset)
 	if d.Looker {
 		fmt.Fprintf(os.Stderr, "  Looker Connection:  %s\n", d.LookerConn)
 	}
+	fmt.Fprintf(os.Stderr, "  Generator VM:       %s (%s, %s)\n", d.VMName, d.Zone, d.MachineType)
+	if vmIP != "" {
+		fmt.Fprintf(os.Stderr, "  Status API:         http://%s:8080/api/status?key=%s\n", vmIP, d.Secret)
+	}
 	fmt.Fprintf(os.Stderr, "  Web UI Tunnel:      gcloud compute ssh %s --zone=%s -- -L 8080:localhost:8080\n", d.VMName, d.Zone)
 	fmt.Fprintf(os.Stderr, "  Live Logs:          gcloud compute ssh %s --zone=%s -- sudo journalctl -u thelook -f\n", d.VMName, d.Zone)
+	if !d.VMOnly {
+		fmt.Fprintf(os.Stderr, "  Backfill Job:       gcloud run jobs execute thelook-bq-backfill --region=%s --project=%s\n", d.Region, d.Project)
+	}
 	fmt.Fprintf(os.Stderr, "=================================================================\n")
 	return nil
 }
@@ -261,6 +281,12 @@ func (d *DeployCmd) deployAlloyDB(run cmdRunner) error {
 
 	bindComputeSARoles(d.Project, []string{"roles/logging.logWriter", "roles/secretmanager.secretAccessor"}, run)
 
+	alloyEnv := "TARGET_DB=postgres"
+	if d.Dataset != "" {
+		alloyEnv += ",ALLOYDB_SCHEMA=" + d.Dataset
+	}
+	alloySecrets := "DATABASE_URL=thelook-alloydb-url:latest,SECRET=thelook-dashboard-secret:latest"
+
 	if d.BackfillOnly {
 		if readSecret(d.Project, "thelook-alloydb-url", run) == "" {
 			privIP, _ := run("gcloud", "alloydb", "instances", "describe", d.Instance, "--cluster="+d.Cluster, "--region="+d.Region, "--project="+d.Project, "--format=value(ipAddress)")
@@ -270,7 +296,7 @@ func (d *DeployCmd) deployAlloyDB(run cmdRunner) error {
 			saveSecret(d.Project, "thelook-alloydb-password", d.Password, run)
 			saveSecret(d.Project, "thelook-alloydb-url", fmt.Sprintf("postgres://postgres:%s@%s:5432/postgres?sslmode=require", d.Password, privIP), run)
 		}
-		return d.provisionAlloyDBBackfillJob(run)
+		return d.provisionBackfillJob("thelook-backfill", "8Gi", alloyEnv, alloySecrets, true, run)
 	}
 
 	fmt.Fprintf(os.Stderr, "==> Provisioning AlloyDB (%s, ZONAL) + Compute Engine VM (%s) (%s) [%s: %dd Cloud Run backfill]\n",
@@ -334,7 +360,7 @@ return ",".join([ip if "/" in ip else f"{ip}/32" for ip in ips])
 	vmIP, _ := run("gcloud", "compute", "instances", "describe", d.VMName, "--zone="+d.Zone, "--project="+d.Project, "--format=value(networkInterfaces[0].accessConfigs[0].natIP)")
 
 	if !d.VMOnly {
-		if err := d.provisionAlloyDBBackfillJob(run); err != nil {
+		if err := d.provisionBackfillJob("thelook-backfill", "8Gi", alloyEnv, alloySecrets, true, run); err != nil {
 			return err
 		}
 	}
@@ -364,39 +390,38 @@ return ",".join([ip if "/" in ip else f"{ip}/32" for ip in ips])
 	return nil
 }
 
-func (d *DeployCmd) provisionAlloyDBBackfillJob(run cmdRunner) error {
-	envVars := "TARGET_DB=postgres"
-	if d.Dataset != "" {
-		envVars += ",ALLOYDB_SCHEMA=" + d.Dataset
-	}
+func (d *DeployCmd) provisionBackfillJob(jobName, memory, envVars, secrets string, vpcEgress bool, run cmdRunner) error {
 	jobArgs := fmt.Sprintf("backfill,--days=%d,--state=/tmp/state.gob", d.Days)
 	if d.To != "" {
 		jobArgs += ",--to=" + d.To
 	}
-	fmt.Fprintf(os.Stderr, "==> Configuring Cloud Run Job 'thelook-backfill' (%s, 4 vCPU / 8 GiB, %dd backfill)...\n", d.Region, d.Days)
+	fmt.Fprintf(os.Stderr, "==> Configuring Cloud Run Job '%s' (%s, 4 vCPU / %s, %dd backfill)...\n", jobName, d.Region, memory, d.Days)
 	common := []string{
-		"thelook-backfill",
+		jobName,
 		"--image=" + cmp.Or(d.Image, defaultImage),
 		"--region=" + d.Region,
-		"--network=" + d.Network,
-		"--vpc-egress=private-ranges-only",
-		"--set-env-vars=" + envVars,
-		"--set-secrets=DATABASE_URL=thelook-alloydb-url:latest,SECRET=thelook-dashboard-secret:latest",
-		"--cpu=4",
-		"--memory=8Gi",
-		"--task-timeout=24h",
-		"--args=" + jobArgs,
-		"--project=" + d.Project,
-		"--quiet",
 	}
+	if vpcEgress {
+		common = append(common, "--network="+d.Network, "--vpc-egress=private-ranges-only")
+	}
+	common = append(common,
+		"--set-env-vars="+envVars,
+		"--set-secrets="+secrets,
+		"--cpu=4",
+		"--memory="+memory,
+		"--task-timeout=24h",
+		"--args="+jobArgs,
+		"--project="+d.Project,
+		"--quiet",
+	)
 	if _, err := run("gcloud", append([]string{"run", "jobs", "create"}, common...)...); err != nil {
 		if _, err = run("gcloud", append([]string{"run", "jobs", "update"}, common...)...); err != nil {
 			return err
 		}
 	}
 	if d.Job || d.BackfillOnly {
-		fmt.Fprintf(os.Stderr, "==> Executing Cloud Run Job 'thelook-backfill' (%s)...\n", d.Region)
-		_, err := run("gcloud", "run", "jobs", "execute", "thelook-backfill", "--region="+d.Region, "--project="+d.Project, "--async", "--quiet")
+		fmt.Fprintf(os.Stderr, "==> Executing Cloud Run Job '%s' (%s)...\n", jobName, d.Region)
+		_, err := run("gcloud", "run", "jobs", "execute", jobName, "--region="+d.Region, "--project="+d.Project, "--async", "--quiet")
 		return err
 	}
 	return nil
@@ -731,6 +756,9 @@ if existing:
 		for _, vm := range vms {
 			fmt.Fprintf(os.Stderr, "==> Deleting Compute Engine VM '%s' (%s)...\n", vm, d.Zone)
 			_, _ = execStep("gcloud", "compute", "instances", "delete", vm, "--zone="+d.Zone, "--project="+d.Project, "--quiet")
+		}
+		if doBQ {
+			_, _ = execStep("gcloud", "run", "jobs", "delete", "thelook-bq-backfill", "--region="+d.Region, "--project="+d.Project, "--quiet")
 		}
 		if doAlloy {
 			_, _ = execStep("gcloud", "run", "jobs", "delete", "thelook-backfill", "--region="+d.Region, "--project="+d.Project, "--quiet")
