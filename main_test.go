@@ -1,7 +1,9 @@
 package main
 
 import (
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -416,6 +418,7 @@ func TestDestroyAndDropDDL(t *testing.T) {
 		"networks subnets delete alloydb-psc-nat-subnet",
 		"compute instances delete thelook-bq-gen",
 		"compute instances delete thelook-alloydb-gen",
+		"run jobs delete thelook-bq-backfill",
 		"run jobs delete thelook-backfill",
 		"firewall-rules delete allow-thelook-status",
 		"bq rm -r -f -d looker-private-demo:ecomm",
@@ -1004,6 +1007,148 @@ func TestDeployAlloyDBTwoTierAndOffsetAlignment(t *testing.T) {
 	if evCnt, ok := status["events"].(float64); !ok || evCnt <= 0 || evCnt >= 1_000_000 {
 		t.Fatalf("expected offset-adjusted event count in (0, 1M), got %v", status["events"])
 	}
+}
+
+func TestDeployBQTwoTierAndBatchFiles(t *testing.T) {
+	var executed []string
+	var startupScript string
+	mockRun := func(name string, args ...string) (string, error) {
+		cmdStr := name + " " + strings.Join(args, " ")
+		executed = append(executed, cmdStr)
+		for _, a := range args {
+			if path, ok := strings.CutPrefix(a, "--metadata-from-file=startup-script="); ok {
+				b, _ := os.ReadFile(path)
+				startupScript = string(b)
+			}
+		}
+		switch {
+		case strings.Contains(cmdStr, "format=value(projectNumber)"):
+			return "123456789", nil
+		case strings.Contains(cmdStr, "format=value(networkInterfaces[0].accessConfigs[0].natIP)"):
+			return "34.120.0.20", nil
+		}
+		return "", nil
+	}
+
+	newBQDeploy := func() DeployCmd {
+		return DeployCmd{
+			Cloud:       true,
+			Target:      "bq",
+			Mode:        "production",
+			Project:     "demo-proj",
+			Dataset:     "ecomm",
+			Location:    "US",
+			Region:      "us-central1",
+			Zone:        "us-central1-a",
+			Network:     "default",
+			MachineType: "e2-micro",
+			Image:       defaultImage,
+			Secret:      "sec-123",
+		}
+	}
+
+	// 1. Default BQ deploy: provisions VM without boot backfill + creates Cloud Run backfill job
+	d := newBQDeploy()
+	if err := d.runCloud(mockRun); err != nil {
+		t.Fatalf("default deployBQ failed: %v", err)
+	}
+	joined := strings.Join(executed, "\n")
+	for _, want := range []string{
+		"services enable --project=demo-proj compute.googleapis.com logging.googleapis.com secretmanager.googleapis.com bigquery.googleapis.com run.googleapis.com",
+		"compute instances create thelook-bq-gen",
+		"--shielded-secure-boot",
+		"run jobs create thelook-bq-backfill",
+		"--set-env-vars=GCP_PROJECT=demo-proj,GCP_DATASET=ecomm",
+		"--set-secrets=SECRET=thelook-dashboard-secret:latest",
+		"--cpu=4 --memory=16Gi --task-timeout=24h",
+		"--args=backfill,--days=3650,--state=/tmp/state.gob",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected default BQ deploy to contain %q, got:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "--vpc-egress") || strings.Contains(joined, "run jobs execute") {
+		t.Fatalf("did not expect BQ job to attach VPC egress or auto-execute without --job, got:\n%s", joined)
+	}
+	if !strings.Contains(startupScript, "if [ 0 -gt 0 ];") {
+		t.Fatalf("expected BQ VM startup script to disable boot backfill (0 days), got:\n%s", startupScript)
+	}
+
+	// 2. --vm-only skips Cloud Run job creation and run.googleapis.com enablement
+	executed = nil
+	dVM := newBQDeploy()
+	dVM.VMOnly = true
+	if err := dVM.runCloud(mockRun); err != nil {
+		t.Fatalf("BQ --vm-only deploy failed: %v", err)
+	}
+	if strings.Contains(strings.Join(executed, "\n"), "run jobs") || strings.Contains(strings.Join(executed, "\n"), "run.googleapis.com") {
+		t.Fatalf("expected --vm-only to skip Cloud Run job commands")
+	}
+
+	// 3. --backfill-only with --to skips VM provisioning and executes bounded Cloud Run job
+	executed = nil
+	dBF := newBQDeploy()
+	dBF.BackfillOnly = true
+	dBF.To = "2026-10-21T20:25:00Z"
+	if err := dBF.runCloud(mockRun); err != nil {
+		t.Fatalf("BQ --backfill-only deploy failed: %v", err)
+	}
+	joinedBF := strings.Join(executed, "\n")
+	if strings.Contains(joinedBF, "compute instances create") {
+		t.Fatalf("expected --backfill-only to skip VM creation")
+	}
+	if !strings.Contains(joinedBF, "--to=2026-10-21T20:25:00Z") || !strings.Contains(joinedBF, "run jobs execute thelook-bq-backfill") {
+		t.Fatalf("expected --backfill-only to configure --to and execute job, got:\n%s", joinedBF)
+	}
+
+	// 4. Verify BatchLoadSink writes valid gzipped NDJSON and filters already-existing shared seed IDs
+	sink, err := bq.NewBatchLoadSink("demo-proj", "ecomm")
+	if err != nil {
+		t.Fatalf("NewBatchLoadSink failed: %v", err)
+	}
+	defer os.RemoveAll(sink.TmpDir)
+	sink.Emit(model.DistributionCenterRow{ID: 1, Name: "DC1"})
+	sink.Emit(model.ProductRow{ID: 1, Name: "BootProd"})
+	sink.Emit(model.ProductRow{ID: 15000, Name: "OrganicProd"})
+	sink.Emit(model.OrderItemRow{ID: 42, OrderID: 10, Status: "Processing"})
+	sink.Emit(model.OrderItemRow{ID: 42, OrderID: 10, Status: "Complete"})
+
+	if err := sink.FlushFiles(map[string]map[int64]bool{
+		"distribution_centers": {1: true},
+		"products":             {1: true},
+	}); err != nil {
+		t.Fatalf("FlushFiles failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sink.TmpDir, "distribution_centers.ndjson.gz")); !os.IsNotExist(err) {
+		t.Fatalf("expected distribution_centers.ndjson.gz to be omitted when all IDs already exist")
+	}
+	prodLines := readGzipLines(t, filepath.Join(sink.TmpDir, "products.ndjson.gz"))
+	if len(prodLines) != 1 || !strings.Contains(prodLines[0], "OrganicProd") {
+		t.Fatalf("expected only non-existing product 15000 in products.ndjson.gz, got: %v", prodLines)
+	}
+	oiLines := readGzipLines(t, filepath.Join(sink.TmpDir, "order_items.ndjson.gz"))
+	if len(oiLines) != 1 || !strings.Contains(oiLines[0], `"status":"Complete"`) {
+		t.Fatalf("expected deduplicated final CDC status in order_items.ndjson.gz, got: %v", oiLines)
+	}
+}
+
+func readGzipLines(t *testing.T, path string) []string {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatalf("gzip reader %s: %v", path, err)
+	}
+	defer gz.Close()
+	raw, err := io.ReadAll(gz)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return strings.Split(strings.TrimSpace(string(raw)), "\n")
 }
 
 

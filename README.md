@@ -29,11 +29,11 @@ To target PostgreSQL or AlloyDB instead:
 
 The generator authenticates with BigQuery through two standard Google Cloud mechanisms:
 
-1. Live streaming (`thelook run` and `thelook gaps --fill`) uses the Go `cloud.google.com/go/bigquery/storage/managedwriter` client, resolving credentials via Application Default Credentials (ADC):
+1. Live streaming, DDL execution, and batch load jobs (`thelook run`, `thelook deploy`, `thelook tables --apply`, `thelook backfill`, `thelook calendar`, and `thelook gaps --fill`) use the Go `cloud.google.com/go/bigquery` and `managedwriter` clients, resolving credentials via Application Default Credentials (ADC):
    - Reads `GOOGLE_APPLICATION_CREDENTIALS` if set.
    - On a local workstation, reads `~/.config/gcloud/application_default_credentials.json` (created by `gcloud auth application-default login`).
-   - On GCE, Cloud Run, or GKE, fetches short-lived OAuth2 tokens directly from the VM metadata server using attached service accounts.
-2. One-shot DDL, batch loads, and SQL queries (`thelook tables --apply`, `thelook backfill`, `thelook calendar`, `thelook analyze`, and `thelook gaps --check-bq`) invoke the `bq` CLI (`bq query` and `bq load`), which uses your active `gcloud` login.
+   - On GCE, Cloud Run, or GKE, fetches short-lived OAuth2 tokens directly from the metadata server using attached service accounts (no external `bq` CLI required inside containers).
+2. Interactive profile analysis queries (`thelook analyze` and `thelook gaps --check-bq`) invoke the `bq` CLI (`bq query --format=json`), which uses your active `gcloud` login.
 
 The principal running the generator needs two IAM roles on `$GCP_PROJECT`:
 
@@ -90,7 +90,7 @@ How upserts are handled by target:
 
 During historical `thelook backfill` runs:
 
-- In BigQuery mode, the generator deduplicates mutable tables in memory by primary key, writes `.ndjson` files to temporary storage, and loads each table via free `bq load` jobs.
+- In BigQuery mode, the generator deduplicates mutable tables and shared catalog IDs in memory by primary key, writes gzip-compressed `.ndjson.gz` files to temporary storage, and loads each table via free BigQuery API load jobs.
 - In PostgreSQL mode, the generator pipes batches directly through `pgx.Batch` into PostgreSQL in pipelined transactions without writing intermediate files.
 - Passing `--stdout` emits raw JSON lines to stdout for piping or inspection instead of loading to a database.
 
@@ -143,24 +143,34 @@ git clone https://github.com/lkrdev/thelook-generator.git
 cd thelook-generator
 ```
 
-### Option A: Deploy to BigQuery (Compute Engine VM)
+### Option A: Deploy to BigQuery (Two-Tier VM + Cloud Run Backfill)
 
-Provisions a Free Tier Compute Engine VM (`thelook-bq-gen` with `--shielded-secure-boot`), creates the BigQuery dataset, deploys tables and retail calendar, backfills historical data, and runs live streaming CDC as a background systemd service:
+Decouples continuous streaming from the bulk historical load so the Free Tier `e2-micro` VM (`thelook-bq-gen` with `--shielded-secure-boot`) immediately applies table DDL, loads `retail_calendar_454`, and starts the live 1-minute Storage Write API daemon (`thelook run --http :8080`), while a Cloud Run Job (`thelook-bq-backfill`, 4 vCPUs, 16 GiB RAM) runs the multi-year gzipped batch load and shuts down with zero idle cost:
 
 ```bash
-# 1. Testing (minimal backfill: 7 days, deploys container by default):
-./deploy-bq.sh
-
-# 2. Production (full backfill: 3650 days / 10 years):
+# Step 1: Deploy BigQuery dataset, secrets, live e2-micro VM, and Cloud Run backfill job:
 ./deploy-bq.sh --mode production
 
-# 3. Explicitly build binary from source instead of container:
-./deploy-bq.sh --use-binary
+# Or deploy and trigger the Cloud Run backfill job immediately:
+./deploy-bq.sh --mode production --job
 
-# 4. Also register the `thelook_bq` BigQuery connection in Looker:
-./deploy-bq.sh --looker
+# Deploy only the dataset and live VM (skip Cloud Run job):
+./deploy-bq.sh --vm-only
 
-# 5. Tear down cloud resources:
+# Also register the `thelook_bq` BigQuery connection in Looker:
+./deploy-bq.sh --mode production --looker
+
+# Step 2: Trigger the historical backfill on Cloud Run (optionally bounded to exact VM first_tick_at):
+gcloud run jobs execute thelook-bq-backfill --region=us-central1
+
+gcloud run jobs execute thelook-bq-backfill --region=us-central1 \
+  --args="backfill,--days=3650,--to=2026-10-21T20:25:00Z,--state=/tmp/state.gob"
+
+# Or update and execute only the backfill job via the deploy wrapper:
+./deploy-bq.sh --backfill-only --mode production --to 2026-10-21T20:25:00Z
+
+# Step 3: View live status or tear down:
+curl -s "http://<VM_IP>:8080/api/status?key=<SECRET>"
 ./deploy-bq.sh --destroy
 ```
 
